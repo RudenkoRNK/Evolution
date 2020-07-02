@@ -177,8 +177,9 @@ private:
   void RunTaskFlow();
   void ResetTaskFlow();
   void GenerateTaskFlow();
-  void ResetPopulation();
-  void GeneratePopulation();
+  void ResetPopulation() noexcept;
+  Population
+  GeneratePopulation(); /* Should be const, except invoking DNAGenerator */
   void EvaluatePopulation();
   void MoveResultsFromBuffer();
 };
@@ -213,7 +214,7 @@ inline void TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::Run() {
   if (!isTaskFlowGenerated)
     GenerateTaskFlow();
   if (!isPopulationGenerated)
-    GeneratePopulation();
+    RegeneratePopulation();
   if (!isPopulationEvaluated)
     EvaluatePopulation();
 
@@ -235,8 +236,11 @@ inline void TBBFlow<EvaluateFG, MutateFG,
 
 template <class EvaluateFG, class MutateFG, class CrossoverFG>
 inline void TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::RegeneratePopulation() {
+  auto population_ = GeneratePopulation();
   ResetPopulation();
-  GeneratePopulation();
+  population = std::move(population_);
+  isPopulationGenerated = true;
+  isPopulationEvaluated = false;
 }
 
 template <class EvaluateFG, class MutateFG, class CrossoverFG>
@@ -250,11 +254,13 @@ inline void TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::SetPopulation(
 
 template <class EvaluateFG, class MutateFG, class CrossoverFG>
 inline void TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::SetPopulation(
-    std::vector<DNA> &&population) {
+    std::vector<DNA> &&population_) {
   assert(SF.GetNEvaluates() == population_.size());
-  population.reserve(populationSize);
+  auto populationTemp = Population{};
+  populationTemp.reserve(populationSize);
   for (auto &&dna : population_)
-    population.push_back({std::move(dna), 0});
+    populationTemp.push_back({std::move(dna), 0});
+  population = std::move(populationTemp);
   isPopulationGenerated = true;
   isPopulationEvaluated = false;
 }
@@ -514,17 +520,15 @@ TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::AddCrossover(Node0 &predecessor0,
 }
 
 template <class EvaluateFG, class MutateFG, class CrossoverFG>
-inline void TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::GeneratePopulation() {
-  assert(population.size() == 0);
+inline typename TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::Population
+TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::GeneratePopulation() {
+  auto population = Population{};
   auto populationSize = SF.GetNEvaluates();
   auto populationConcurrent = tbb::concurrent_vector<DNA>{};
   populationConcurrent.reserve(populationSize);
 
   tbb::parallel_for(tbb::blocked_range<size_t>(0, populationSize),
                     [&](tbb::blocked_range<size_t> r) {
-                      /*auto &&DNAGenerator = GetDNAGeneratorFunction();
-                      for (auto i : r)
-                        populationConcurrent.push_back(DNAGenerator());*/
                       std::generate_n(std::back_inserter(populationConcurrent),
                                       r.end() - r.begin(),
                                       GetDNAGeneratorFunction());
@@ -533,8 +537,7 @@ inline void TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::GeneratePopulation() {
   population.reserve(populationSize);
   for (auto &&dna : populationConcurrent)
     population.push_back({std::move(dna), 0});
-  isPopulationGenerated = true;
-  isPopulationEvaluated = false;
+  return population;
 }
 
 template <class EvaluateFG, class MutateFG, class CrossoverFG>
@@ -722,7 +725,8 @@ inline void TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::GenerateTaskFlow() {
 }
 
 template <class EvaluateFG, class MutateFG, class CrossoverFG>
-inline void TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::ResetPopulation() {
+inline void
+TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::ResetPopulation() noexcept {
   population.clear();
   isPopulationGenerated = false;
   isPopulationEvaluated = false;

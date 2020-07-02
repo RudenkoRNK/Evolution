@@ -62,17 +62,18 @@ private:
   size_t nEvaluates = 0;
   size_t nMutates = 0;
   size_t nCrossovers = 0;
+  State maxIndexState;
 
   template <bool IsOppositeDirection> auto GetChildStatesDir(State state) const;
 
 public:
+  // Construction
   State GetOrAddInitialState(size_t index);
   State AddMutate(State state);
   State AddCrossover(State state0, State state1);
   void SetEvaluate(State state);
 
-  size_t GetNStates() const;
-  size_t GetNOperations() const;
+  // State/Operation Access
   StateIteratorRange GetStates() const;
   OperationIteratorRange GetOperations() const;
   State GetAnyParent(State state) const;
@@ -83,24 +84,33 @@ public:
   State GetTarget(Operation operation) const;
   Operation GetCrossoverPair(Operation operation) const;
   State GetCrossoverPair(State parent, State child) const;
-  bool IsMutate(Operation operation) const;
-  bool IsCrossover(Operation operation) const;
-  bool IsInitialState(State state) const;
-  OperationType GetOperationType(Operation operation) const;
-  size_t GetOutDegree(State state) const;
-  size_t GetIndex(State state) const;
-  size_t GetNEvaluates() const;
-  size_t GetNMutates() const;
-  size_t GetNCrossovers() const;
   StateSet const &GetInitialStates() const;
   StateSet const &GetEvaluateStates() const;
 
+  // Counts
+  size_t GetOutDegree(State state) const;
+  size_t GetNStates() const;
+  size_t GetNOperations() const;
+  size_t GetNEvaluates() const;
+  size_t GetNMutates() const;
+  size_t GetNCrossovers() const;
+
+  // Properties
+  bool IsMutate(Operation operation) const;
+  bool IsCrossover(Operation operation) const;
+  bool IsInitialState(State state) const;
   bool IsIndexSet(State state) const;
   bool IsEvaluate(State state) const;
   bool IsLeaf(State state) const;
-  bool IsAllLeavesEvaluate() const;
+  size_t GetIndex(State state) const;
+  State GetMaxIndexState() const;
+  OperationType GetOperationType(Operation operation) const;
+
+  // Verification
+  std::optional<State> FindUnevaluatedLeaf() const;
   bool Verify() const;
 
+  // Tools
   template <bool IsOppositeDirection = false, class ActFunction,
             class IsAddChildFunction>
   void DepthFirstSearch(StateSet const &startStates, ActFunction &&Act,
@@ -119,7 +129,9 @@ public:
 } // namespace Evolution
 namespace Evolution {
 
+// Construction
 inline StateFlow::State StateFlow::GetOrAddInitialState(size_t index) {
+  assert(index != UndefinedIndex);
   auto &&inits = GetInitialStates();
   auto s = std::find_if(inits.begin(), inits.end(),
                         [&](auto state) { return GetIndex(state) == index; });
@@ -127,6 +139,9 @@ inline StateFlow::State StateFlow::GetOrAddInitialState(size_t index) {
     return *s;
   auto state = boost::add_vertex({.index = index}, G);
   initialStates.insert(state);
+  if (initialStates.size() == 0)
+    maxIndexState = state;
+  maxIndexState = GetIndex(maxIndexState) > index ? maxIndexState : state;
   return state;
 }
 inline StateFlow::State StateFlow::AddMutate(State state) {
@@ -153,19 +168,16 @@ inline StateFlow::State StateFlow::AddCrossover(State state0, State state1) {
 }
 inline void StateFlow::SetEvaluate(State state) {
   G[state].isEvaluate = true;
-  ++nEvaluates;
   evaluateStates.insert(state);
+  ++nEvaluates;
 }
-inline size_t StateFlow::GetNStates() const { return boost::num_vertices(G); }
-inline size_t StateFlow::GetNOperations() const { return boost::num_edges(G); }
+
+// State/Operation Access
 inline StateFlow::StateIteratorRange StateFlow::GetStates() const {
   return boost::vertices(G);
 }
-inline StateFlow::StateSet const &StateFlow::GetInitialStates() const {
-  return initialStates;
-}
-inline StateFlow::StateSet const &StateFlow::GetEvaluateStates() const {
-  return evaluateStates;
+inline StateFlow::OperationIteratorRange StateFlow::GetOperations() const {
+  return boost::edges(G);
 };
 inline StateFlow::State StateFlow::GetAnyParent(State state) const {
   assert(!IsInitialState(state));
@@ -176,9 +188,6 @@ inline StateFlow::State StateFlow::GetAnyParent(State state) const {
 inline StateFlow::ChildStateIteratorRange
 StateFlow::GetChildStates(State state) const {
   return boost::adjacent_vertices(state, G);
-};
-inline StateFlow::OperationIteratorRange StateFlow::GetOperations() const {
-  return boost::edges(G);
 };
 inline StateFlow::Operation StateFlow::GetAnyInOperation(State state) const {
   assert(!IsInitialState(state));
@@ -212,6 +221,24 @@ inline StateFlow::State StateFlow::GetCrossoverPair(State parent,
   assert(e.second);
   return GetSource(e.first);
 }
+inline StateFlow::StateSet const &StateFlow::GetInitialStates() const {
+  return initialStates;
+}
+inline StateFlow::StateSet const &StateFlow::GetEvaluateStates() const {
+  return evaluateStates;
+};
+
+// Counts
+inline size_t StateFlow::GetOutDegree(State state) const {
+  return boost::out_degree(state, G);
+};
+inline size_t StateFlow::GetNStates() const { return boost::num_vertices(G); }
+inline size_t StateFlow::GetNOperations() const { return boost::num_edges(G); }
+inline size_t StateFlow::GetNEvaluates() const { return nEvaluates; }
+inline size_t StateFlow::GetNMutates() const { return nMutates; }
+inline size_t StateFlow::GetNCrossovers() const { return nCrossovers; }
+
+// Properties
 inline bool StateFlow::IsMutate(Operation operation) const {
   return GetOperationType(operation) == OperationType::Mutate;
 }
@@ -223,21 +250,6 @@ inline bool StateFlow::IsCrossover(Operation operation) const {
 inline bool StateFlow::IsInitialState(State state) const {
   return GetInitialStates().contains(state);
 }
-inline StateFlow::OperationType
-StateFlow::GetOperationType(Operation operation) const {
-  return G[operation].operation;
-};
-inline size_t StateFlow::GetOutDegree(State state) const {
-  return boost::out_degree(state, G);
-};
-inline size_t StateFlow::GetIndex(State state) const {
-  auto index = G[state].index;
-  assert(index != UndefinedIndex);
-  return index;
-}
-inline size_t StateFlow::GetNEvaluates() const { return nEvaluates; }
-inline size_t StateFlow::GetNMutates() const { return nMutates; }
-inline size_t StateFlow::GetNCrossovers() const { return nCrossovers; }
 inline bool StateFlow::IsIndexSet(State state) const {
   return GetIndex(state) != UndefinedIndex;
 };
@@ -250,23 +262,37 @@ inline bool StateFlow::IsEvaluate(State state) const {
 inline bool StateFlow::IsLeaf(State state) const {
   return GetOutDegree(state) == 0;
 }
-inline bool StateFlow::IsAllLeavesEvaluate() const {
+inline size_t StateFlow::GetIndex(State state) const {
+  auto index = G[state].index;
+  assert(index != UndefinedIndex);
+  return index;
+}
+inline size_t StateFlow::GetMaxIndexState() const { return maxIndexState; }
+inline StateFlow::OperationType
+StateFlow::GetOperationType(Operation operation) const {
+  return G[operation].operation;
+};
+
+// Verification
+
+inline std::optional<StateFlow::State> StateFlow::FindUnevaluatedLeaf() const {
+  auto leaf = std::optional<State>{};
   auto IsAllLeavesEval = true;
-  DepthFirstSearch(GetInitialStates(), [&](StateVector const &path) {
-    if (IsLeaf(path.back()))
-      IsAllLeavesEval &= IsEvaluate(path.back());
-  });
-  return IsAllLeavesEval;
+  BreadthFirstSearch(
+      GetInitialStates(),
+      [&](State state) {
+        if (IsLeaf(state) && !IsEvaluate(state)) {
+          IsAllLeavesEval = false;
+          leaf = state;
+        }
+      },
+      [&](State state) { return IsAllLeavesEval; });
+  return leaf;
 }
 inline bool StateFlow::Verify() const {
   auto nEvaluates = GetNEvaluates();
-  auto maxIndex = GetIndex(
-      *std::max_element(GetInitialStates().begin(), GetInitialStates().end(),
-                        [&](State state0, State state1) {
-                          return GetIndex(state0) < GetIndex(state1);
-                        }));
-  return GetInitialStates().size() <= nEvaluates && maxIndex < nEvaluates &&
-         IsAllLeavesEvaluate();
+  return GetInitialStates().size() <= nEvaluates &&
+         GetIndex(GetMaxIndexState()) < nEvaluates && !FindUnevaluatedLeaf();
 }
 
 template <bool IsOppositeDirection>
