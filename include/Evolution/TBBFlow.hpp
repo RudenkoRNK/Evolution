@@ -2,6 +2,7 @@
 #define NOMINMAX
 #include "ArgumentTraits.hpp"
 #include "StateFlow.hpp"
+#include "Utility.hpp"
 #include "tbb/concurrent_unordered_map.h"
 #include "tbb/concurrent_unordered_set.h"
 #include "tbb/enumerable_thread_specific.h"
@@ -31,8 +32,12 @@ private:
   using EvaluateFunction = Func_<EvaluateFG>;
   using MutateFunction = Func_<MutateFG>;
   using CrossoverFunction = Func_<CrossoverFG>;
+
+public:
   using DNA = std::remove_cvref_t<
       typename ArgumentTraits<EvaluateFunction>::template Type<1>>;
+
+private:
   using DNAGeneratorFunction = std::function<DNA()>;
 
   // DNA should a modifiable self-sufficient type
@@ -103,7 +108,8 @@ private:
 
   using DNAPtr = std::shared_ptr<DNA>;
 
-  using InputNode = tbb::flow::input_node<DNAPtr>;
+  // TODO: add support for lightweight policy
+  using InputNode = tbb::flow::function_node<size_t, DNAPtr>;
   using EvaluateNode = tbb::flow::function_node<DNAPtr, int>;
   using MutateNode = tbb::flow::function_node<DNAPtr, DNAPtr>;
   using CrossoverNode =
@@ -111,22 +117,27 @@ private:
   using CrossoverJoinNode = tbb::flow::join_node<std::tuple<DNAPtr, DNAPtr>>;
 
 public:
-  struct DNAGrade final {
-    DNA dna;
-    double grade;
-  };
-  using Population = std::vector<DNAGrade>;
+  using Population = std::vector<DNA>;
+  using Grades = std::vector<double>;
 
   template <class DNAGeneratorFG>
-  TBBFlow(StateFlow &&stateFlow, EvaluateFG &&Evaluate, MutateFG &&Mutate,
-          CrossoverFG &&Crossover, DNAGeneratorFG &&DNAGenerator);
+  TBBFlow(EvaluateFG &&Evaluate, MutateFG &&Mutate, CrossoverFG &&Crossover,
+          DNAGeneratorFG &&DNAGenerator, StateFlow &&stateFlow);
   void Run();
-  Population const &GetPopulation() const noexcept;
   void AllowSwapArgumentsInCrossover() noexcept;
-
+  void PermutePopulation(std::vector<size_t> &permutation);
+  template <class Indexer, class IndexFunction>
+  void PermutePopulation(std::vector<Indexer> &permutation,
+                         IndexFunction &&Index);
   void RegeneratePopulation();
   void SetPopulation(Population &&population) noexcept;
-  void SetPopulation(std::vector<DNA> &&population);
+  void SetPopulationWithGrades(Population &&population,
+                               Grades &&grades) noexcept;
+
+  Population const &GetPopulation() const noexcept;
+  Grades const &GetGrades() const noexcept;
+  size_t GetPopulationSize() const noexcept;
+  StateFlow const &GetStateFlow() const noexcept;
 
 private:
   // Set up in constructor:
@@ -139,9 +150,11 @@ private:
 
   // Set up with additional interface methods:
   Population population;
+  Grades grades;
   bool isSwapArgumentsAllowedInCrossover = false;
 
   // Generated internally:
+  size_t const populationSize;
   bool isPopulationGenerated = false;
   bool isPopulationEvaluated = false;
   bool isTaskFlowGenerated = false;
@@ -149,13 +162,12 @@ private:
   tbb::concurrent_unordered_map<DNAPtr, double, std::hash<DNAPtr>>
       evaluateBuffer;
   std::vector<InputNode> inputNodes;
-  std::unordered_map<size_t, bool> isInputNodeActivated;
+  std::vector<size_t> inputIndices;
   std::vector<EvaluateNode> evaluateNodes;
   std::vector<MutateNode> mutateNodes;
   std::vector<CrossoverJoinNode> crossoverJoinNodes;
   std::vector<CrossoverNode> crossoverNodes;
 
-  size_t GetPopulationSize() const noexcept;
   EvaluateFunction &GetEvaluateFunction();
   MutateFunction &GetMutateFunction();
   CrossoverFunction &GetCrossoverFunction();
@@ -190,12 +202,13 @@ namespace Evolution {
 template <class EvaluateFG, class MutateFG, class CrossoverFG>
 template <class DNAGeneratorFG>
 inline TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::TBBFlow(
-    StateFlow &&stateFlow, EvaluateFG &&Evaluate, MutateFG &&Mutate,
-    CrossoverFG &&Crossover, DNAGeneratorFG &&DNAGenerator_)
+    EvaluateFG &&Evaluate, MutateFG &&Mutate, CrossoverFG &&Crossover,
+    DNAGeneratorFG &&DNAGenerator_, StateFlow &&stateFlow)
     : SF(std::move(stateFlow)),
       EvaluateThreadSpecificOrGlobal(std::forward<EvaluateFG>(Evaluate)),
       MutateThreadSpecificOrGlobal(std::forward<MutateFG>(Mutate)),
-      CrossoverThreadSpecificOrGlobal(std::forward<CrossoverFG>(Crossover)) {
+      CrossoverThreadSpecificOrGlobal(std::forward<CrossoverFG>(Crossover)),
+      populationSize(stateFlow.GetNEvaluates()) {
   assert(SF.Verify());
   if constexpr (std::is_convertible_v<DNAGeneratorFG, DNAGeneratorFunction>)
     DNAGenerator =
@@ -208,15 +221,16 @@ inline TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::TBBFlow(
         std::forward<DNAGeneratorFG>(DNAGenerator_));
   }
 }
-
 template <class EvaluateFG, class MutateFG, class CrossoverFG>
 inline void TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::Run() {
-  if (!isTaskFlowGenerated)
-    GenerateTaskFlow();
   if (!isPopulationGenerated)
     RegeneratePopulation();
-  if (!isPopulationEvaluated)
+  if (!isPopulationEvaluated) {
     EvaluatePopulation();
+    return;
+  }
+  if (!isTaskFlowGenerated)
+    GenerateTaskFlow();
 
   RunTaskFlow();
   MoveResultsFromBuffer();
@@ -225,7 +239,29 @@ inline void TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::Run() {
 template <class EvaluateFG, class MutateFG, class CrossoverFG>
 inline typename TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::Population const &
 TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::GetPopulation() const noexcept {
+  assert(isPopulationGenerated);
   return population;
+}
+
+template <class EvaluateFG, class MutateFG, class CrossoverFG>
+inline typename TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::Grades const &
+TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::GetGrades() const noexcept {
+  return grades;
+}
+
+template <class EvaluateFG, class MutateFG, class CrossoverFG>
+inline void TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::PermutePopulation(
+    std::vector<size_t> &permutation) {
+  Permute(population, permutation, std::identity{});
+  Permute(grades, permutation, std::identity{});
+}
+
+template <class EvaluateFG, class MutateFG, class CrossoverFG>
+template <class Indexer, class IndexFunction>
+inline void TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::PermutePopulation(
+    std::vector<Indexer> &permutation, IndexFunction &&Index) {
+  Permute(population, permutation, Index);
+  Permute(grades, permutation, Index);
 }
 
 template <class EvaluateFG, class MutateFG, class CrossoverFG>
@@ -249,20 +285,22 @@ inline void TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::SetPopulation(
   assert(SF.GetNEvaluates() == population_.size());
   population = std::move(population_);
   isPopulationGenerated = true;
+  isPopulationEvaluated = false;
+}
+
+template <class EvaluateFG, class MutateFG, class CrossoverFG>
+inline void TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::SetPopulationWithGrades(
+    Population &&population_, Grades &&grades_) {
+  assert(SF.GetNEvaluates() == grades_.size());
+  SetPopulation(std::move(population_));
+  grades = std::move(grades_);
   isPopulationEvaluated = true;
 }
 
 template <class EvaluateFG, class MutateFG, class CrossoverFG>
-inline void TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::SetPopulation(
-    std::vector<DNA> &&population_) {
-  assert(SF.GetNEvaluates() == population_.size());
-  auto populationTemp = Population{};
-  populationTemp.reserve(populationSize);
-  for (auto &&dna : population_)
-    populationTemp.push_back({std::move(dna), 0});
-  population = std::move(populationTemp);
-  isPopulationGenerated = true;
-  isPopulationEvaluated = false;
+inline StateFlow const &
+TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::GetStateFlow() const noexcept {
+  return SF;
 }
 
 template <class EvaluateFG, class MutateFG, class CrossoverFG>
@@ -304,7 +342,7 @@ inline
 template <class EvaluateFG, class MutateFG, class CrossoverFG>
 inline size_t
 TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::GetPopulationSize() const noexcept {
-  return population.size();
+  return populationSize;
 }
 
 template <class EvaluateFG, class MutateFG, class CrossoverFG>
@@ -455,16 +493,13 @@ TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::AddInput(size_t index,
                                                      bool isCopy) {
   // Should be preallocated to avoid refs invalidation
   assert(inputNodes.capacity() > inputNodes.size());
-  inputNodes.push_back(InputNode(taskFlow, [&, index, isCopy](DNAPtr &output) {
-    // input nodes are always executed in serial, thus it is safe to modify
-    // its own state
-    if (isInputNodeActivated.at(index))
-      return false;
-    isInputNodeActivated.at(index) = true;
-    output = isCopy ? CopyHelper(population.at(index).dna)
-                    : MoveHelper(std::move(population.at(index).dna));
-    return true;
-  }));
+  inputIndices.push_back(index);
+  inputNodes.push_back(InputNode(
+      taskFlow, tbb::flow::concurrency::serial, [&, isCopy](size_t index_) {
+        return isCopy ? CopyHelper(population.at(index_))
+                      : MoveHelper(std::move(population.at(index_)));
+      }));
+  assert(inputIndices.size() == inputNodes.size());
   return inputNodes.back();
 }
 
@@ -523,31 +558,33 @@ template <class EvaluateFG, class MutateFG, class CrossoverFG>
 inline typename TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::Population
 TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::GeneratePopulation() {
   auto population = Population{};
-  auto populationSize = SF.GetNEvaluates();
   auto populationConcurrent = tbb::concurrent_vector<DNA>{};
-  populationConcurrent.reserve(populationSize);
+  populationConcurrent.reserve(GetPopulationSize());
 
-  tbb::parallel_for(tbb::blocked_range<size_t>(0, populationSize),
+  tbb::parallel_for(tbb::blocked_range<size_t>(0, GetPopulationSize()),
                     [&](tbb::blocked_range<size_t> r) {
                       std::generate_n(std::back_inserter(populationConcurrent),
                                       r.end() - r.begin(),
                                       GetDNAGeneratorFunction());
                     });
 
-  population.reserve(populationSize);
+  population.reserve(GetPopulationSize());
   for (auto &&dna : populationConcurrent)
-    population.push_back({std::move(dna), 0});
+    population.push_back(std::move(dna));
   return population;
 }
 
 template <class EvaluateFG, class MutateFG, class CrossoverFG>
 inline void TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::EvaluatePopulation() {
   assert(isPopulationGenerated);
-  tbb::parallel_for_each(population.begin(), population.end(),
-                         [&](DNAGrade &dna) {
-                           auto &&Evaluate = GetEvaluateFunction();
-                           dna.grade = Evaluate(dna.dna);
-                         });
+  auto indices = std::vector<size_t>(GetPopulationSize());
+  std::iota(indices.begin(), indices.end(), size_t{0});
+  auto grades_ = Grades(GetPopulationSize());
+  tbb::parallel_for_each(indices.begin(), indices.end(), [&](size_t index) {
+    auto &&Evaluate = GetEvaluateFunction();
+    grades_.at(index) = Evaluate(population.at(index));
+  });
+  grades = std::move(grades_);
   isPopulationEvaluated = true;
 }
 
@@ -564,18 +601,17 @@ TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::MoveResultsFromBuffer() {
   for (auto &&dnaPair : evaluateBuffer) {
     auto index = *availableIndices.begin();
     availableIndices.erase(index);
-    population.at(index) = {std::move(*dnaPair.first), dnaPair.second};
+    population.at(index) = std::move(*dnaPair.first);
+    grades.at(index) = dnaPair.second;
   }
 }
 
 template <class EvaluateFG, class MutateFG, class CrossoverFG>
 inline void TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::RunTaskFlow() {
-  assert(population.size() == SF.GetNEvaluates());
+  assert(population.size() == GetPopulationSize());
   evaluateBuffer.clear();
-  for (auto &&[index, isActivated] : isInputNodeActivated)
-    isActivated = false;
-  for (auto &&input : inputNodes)
-    input.activate();
+  for (auto i = size_t{0}; i < inputNodes.size(); ++i)
+    inputNodes.at(i).try_put(inputIndices.at(i));
   taskFlow.wait_for_all();
 }
 
@@ -586,7 +622,7 @@ inline void TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::ResetTaskFlow() {
   mutateNodes.clear();
   crossoverJoinNodes.clear();
   crossoverNodes.clear();
-  isInputNodeActivated.clear();
+  inputIndices.clear();
   taskFlow.reset();
 }
 
@@ -605,11 +641,11 @@ inline void TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::GenerateTaskFlow() {
   assert(mutateNodes.size() == 0);
   assert(crossoverJoinNodes.size() == 0);
   assert(crossoverNodes.size() == 0);
-  assert(isInputNodeActivated.size() == 0);
+  assert(inputIndices.size() == 0);
   assert(!taskFlow.is_cancelled());
 
   inputNodes.reserve(SF.GetInitialStates().size());
-  isInputNodeActivated.reserve(SF.GetInitialStates().size());
+  inputIndices.reserve(SF.GetInitialStates().size());
   evaluateNodes.reserve(SF.GetNEvaluates());
   mutateNodes.reserve(SF.GetNMutates());
   crossoverJoinNodes.reserve(SF.GetNCrossovers());
@@ -646,7 +682,6 @@ inline void TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::GenerateTaskFlow() {
   auto ResolveInitial = [&](State state) {
     assert(!IsResolved(state) && IsResolvable(state));
     assert(SF.IsInitialState(state));
-    isInputNodeActivated.emplace(SF.GetIndex(state), false);
     auto &&node = AddInput(SF.GetIndex(state), SF.IsEvaluate(state));
     nodes.emplace(state, NodeRef(InputNodeIndex, std::ref(node)));
   };
@@ -728,6 +763,7 @@ template <class EvaluateFG, class MutateFG, class CrossoverFG>
 inline void
 TBBFlow<EvaluateFG, MutateFG, CrossoverFG>::ResetPopulation() noexcept {
   population.clear();
+  grades.clear();
   isPopulationGenerated = false;
   isPopulationEvaluated = false;
 }

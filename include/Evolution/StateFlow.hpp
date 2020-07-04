@@ -84,16 +84,16 @@ public:
   State GetTarget(Operation operation) const;
   Operation GetCrossoverPair(Operation operation) const;
   State GetCrossoverPair(State parent, State child) const;
-  StateSet const &GetInitialStates() const;
-  StateSet const &GetEvaluateStates() const;
+  StateSet const &GetInitialStates() const noexcept;
+  StateSet const &GetEvaluateStates() const noexcept;
 
   // Counts
   size_t GetOutDegree(State state) const;
   size_t GetNStates() const;
   size_t GetNOperations() const;
-  size_t GetNEvaluates() const;
-  size_t GetNMutates() const;
-  size_t GetNCrossovers() const;
+  size_t GetNEvaluates() const noexcept;
+  size_t GetNMutates() const noexcept;
+  size_t GetNCrossovers() const noexcept;
 
   // Properties
   bool IsMutate(Operation operation) const;
@@ -103,7 +103,7 @@ public:
   bool IsEvaluate(State state) const;
   bool IsLeaf(State state) const;
   size_t GetIndex(State state) const;
-  State GetMaxIndexState() const;
+  State GetMaxIndexState() const noexcept;
   OperationType GetOperationType(Operation operation) const;
 
   // Verification
@@ -221,10 +221,11 @@ inline StateFlow::State StateFlow::GetCrossoverPair(State parent,
   assert(e.second);
   return GetSource(e.first);
 }
-inline StateFlow::StateSet const &StateFlow::GetInitialStates() const {
+inline StateFlow::StateSet const &StateFlow::GetInitialStates() const noexcept {
   return initialStates;
 }
-inline StateFlow::StateSet const &StateFlow::GetEvaluateStates() const {
+inline StateFlow::StateSet const &StateFlow::GetEvaluateStates() const
+    noexcept {
   return evaluateStates;
 };
 
@@ -234,9 +235,9 @@ inline size_t StateFlow::GetOutDegree(State state) const {
 };
 inline size_t StateFlow::GetNStates() const { return boost::num_vertices(G); }
 inline size_t StateFlow::GetNOperations() const { return boost::num_edges(G); }
-inline size_t StateFlow::GetNEvaluates() const { return nEvaluates; }
-inline size_t StateFlow::GetNMutates() const { return nMutates; }
-inline size_t StateFlow::GetNCrossovers() const { return nCrossovers; }
+inline size_t StateFlow::GetNEvaluates() const noexcept { return nEvaluates; }
+inline size_t StateFlow::GetNMutates() const noexcept { return nMutates; }
+inline size_t StateFlow::GetNCrossovers() const noexcept { return nCrossovers; }
 
 // Properties
 inline bool StateFlow::IsMutate(Operation operation) const {
@@ -267,14 +268,16 @@ inline size_t StateFlow::GetIndex(State state) const {
   assert(index != UndefinedIndex);
   return index;
 }
-inline size_t StateFlow::GetMaxIndexState() const { return maxIndexState; }
+inline size_t StateFlow::GetMaxIndexState() const noexcept {
+  assert(GetNStates() > 0);
+  return maxIndexState;
+}
 inline StateFlow::OperationType
 StateFlow::GetOperationType(Operation operation) const {
   return G[operation].operation;
 };
 
 // Verification
-
 inline std::optional<StateFlow::State> StateFlow::FindUnevaluatedLeaf() const {
   auto leaf = std::optional<State>{};
   auto IsAllLeavesEval = true;
@@ -291,7 +294,7 @@ inline std::optional<StateFlow::State> StateFlow::FindUnevaluatedLeaf() const {
 }
 inline bool StateFlow::Verify() const {
   auto nEvaluates = GetNEvaluates();
-  return GetInitialStates().size() <= nEvaluates &&
+  return GetNStates() > 0 && GetInitialStates().size() <= nEvaluates &&
          GetIndex(GetMaxIndexState()) < nEvaluates && !FindUnevaluatedLeaf();
 }
 
