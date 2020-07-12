@@ -7,10 +7,32 @@
 
 namespace Evolution {
 
+inline std::vector<size_t> GetIndices(size_t size) {
+  auto indices = std::vector<size_t>(size);
+  std::iota(indices.begin(), indices.end(), size_t{0});
+  return indices;
+}
+
+template <class T>
+inline void Permute(std::vector<T> &v, std::vector<size_t> &perm) {
+  Permute(v, perm, std::identity{});
+}
+
 template <class T, class Indexer, class IndexFunction>
 inline void Permute(std::vector<T> &v, std::vector<Indexer> &perm,
                     IndexFunction &&Index) {
+  auto buffer = std::vector<size_t>(v.size());
+  Permute(v, perm, Index, buffer);
+}
+
+template <class T, class Indexer, class IndexFunction>
+inline void
+Permute(std::vector<T> &v, std::vector<Indexer> &perm, IndexFunction &Index,
+        std::vector<size_t>
+            &buffer) noexcept(noexcept(Index(std::declval<Indexer>))) {
+  auto &&control = buffer;
 #ifndef NDEBUG
+  assert(buffer.size() == v.size());
   assert(std::unique(perm.begin(), perm.end(),
                      [&](Indexer const &lhs, Indexer const &rhs) {
                        return Index(lhs) == Index(rhs);
@@ -23,10 +45,11 @@ inline void Permute(std::vector<T> &v, std::vector<Indexer> &perm,
                            [&](Indexer const &lhs, Indexer const &rhs) {
                              return lhs < rhs;
                            }) == perm.size() - 1);
-  assert(&v != &perm);
+  if constexpr (std::is_same_v<T, Indexer>) {
+    assert(&v != &perm);
+  }
 #endif // !NDEBUG
 
-  auto control = std::vector<size_t>(v.size());
   std::iota(control.begin(), control.end(), size_t{0});
   for (auto i = size_t{0}, e = v.size(); i < e; ++i) {
     while (Index(perm.at(i)) != i) {

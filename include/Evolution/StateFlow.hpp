@@ -59,6 +59,7 @@ private:
   StateGraph G;
   StateSet initialStates;
   StateSet evaluateStates;
+  size_t nInitialEvaluates = 0;
   size_t nEvaluates = 0;
   size_t nMutates = 0;
   size_t nCrossovers = 0;
@@ -91,6 +92,7 @@ public:
   size_t GetOutDegree(State state) const;
   size_t GetNStates() const;
   size_t GetNOperations() const;
+  size_t GetNInitialEvaluates() const noexcept;
   size_t GetNEvaluates() const noexcept;
   size_t GetNMutates() const noexcept;
   size_t GetNCrossovers() const noexcept;
@@ -170,6 +172,8 @@ inline void StateFlow::SetEvaluate(State state) {
   G[state].isEvaluate = true;
   evaluateStates.insert(state);
   ++nEvaluates;
+  if (IsInitialState(state))
+    ++nInitialEvaluates;
 }
 
 // State/Operation Access
@@ -235,6 +239,9 @@ inline size_t StateFlow::GetOutDegree(State state) const {
 };
 inline size_t StateFlow::GetNStates() const { return boost::num_vertices(G); }
 inline size_t StateFlow::GetNOperations() const { return boost::num_edges(G); }
+inline size_t StateFlow::GetNInitialEvaluates() const noexcept {
+  return nInitialEvaluates;
+}
 inline size_t StateFlow::GetNEvaluates() const noexcept { return nEvaluates; }
 inline size_t StateFlow::GetNMutates() const noexcept { return nMutates; }
 inline size_t StateFlow::GetNCrossovers() const noexcept { return nCrossovers; }

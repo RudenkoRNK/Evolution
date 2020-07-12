@@ -14,7 +14,7 @@ target_link_libraries(Evolution INTERFACE ${Boost_LIBRARIES})
 target_link_libraries(Evolution INTERFACE ${TBB_IMPORTED_TARGETS})
 target_sources(Evolution
   INTERFACE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/Evolution/Evolution.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/Evolution/Environment.hpp
 	${CMAKE_CURRENT_SOURCE_DIR}/include/Evolution/StateFlow.hpp
 )
 
