@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 
 project(Evolution)
-option(Evolution_BUILD_TEST "Build evolution tests" ON)
+option(Evolution_BUILD_TEST "Build evolution tests" OFF)
 
 
 find_package(Boost 1.72.0 COMPONENTS graph)
