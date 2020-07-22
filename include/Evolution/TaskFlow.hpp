@@ -1,8 +1,8 @@
 #pragma once
 #define NOMINMAX
-#include "ArgumentTraits.hpp"
-#include "GeneratorTraits.hpp"
-#include "StateFlow.hpp"
+#include "Evolution/ArgumentTraits.hpp"
+#include "Evolution/GeneratorTraits.hpp"
+#include "Evolution/StateFlow.hpp"
 #include "tbb/concurrent_unordered_map.h"
 #include "tbb/concurrent_unordered_set.h"
 #include "tbb/enumerable_thread_specific.h"
