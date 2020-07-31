@@ -9,22 +9,13 @@
 
 namespace Evolution {
 class StateFlow final {
-public:
-  enum class OperationType {
-    Mutate,
-    CrossoverArgFirst,
-    CrossoverArgSecond,
-  };
-
 private:
   auto constexpr static UndefinedIndex = size_t(-1);
-  struct OperationProperties final {
-    OperationType operation;
-  };
   struct StateProperties final {
     bool isEvaluate = false;
     size_t index = UndefinedIndex;
   };
+  struct OperationProperties final {};
 
   using StateGraph =
       boost::adjacency_list<boost::vecS, boost::vecS, boost::bidirectionalS,
@@ -93,23 +84,15 @@ public:
   }
   State AddMutate(State state) {
     auto ret = boost::add_vertex(StateProperties{}, G);
-    boost::add_edge(state, ret, {OperationType::Mutate}, G);
+    boost::add_edge(state, ret, {}, G);
     ++nMutates;
     return ret;
   }
   State AddCrossover(State state0, State state1) {
     assert(state0 != state1);
     auto ret = boost::add_vertex(StateProperties{}, G);
-    boost::add_edge(state0, ret,
-                    {
-                        OperationType::CrossoverArgFirst,
-                    },
-                    G);
-    boost::add_edge(state1, ret,
-                    {
-                        OperationType::CrossoverArgSecond,
-                    },
-                    G);
+    boost::add_edge(state0, ret, {}, G);
+    boost::add_edge(state1, ret, {}, G);
     ++nCrossovers;
     return ret;
   }
@@ -176,12 +159,10 @@ public:
 
   // Properties
   bool IsMutate(Operation operation) const {
-    return GetOperationType(operation) == OperationType::Mutate;
+    return boost::in_degree(GetTarget(operation), G) == 1;
   }
   bool IsCrossover(Operation operation) const {
-    auto type = GetOperationType(operation);
-    return type == OperationType::CrossoverArgFirst ||
-           type == OperationType::CrossoverArgSecond;
+    return boost::in_degree(GetTarget(operation), G) == 2;
   }
   bool IsInitialState(State state) const {
     return GetInitialStates().contains(state);
@@ -203,9 +184,6 @@ public:
   State GetMaxIndexState() const noexcept {
     assert(GetNStates() > 0);
     return maxIndexState;
-  }
-  OperationType GetOperationType(Operation operation) const {
-    return G[operation].operation;
   }
 
   // Debug & Verification
