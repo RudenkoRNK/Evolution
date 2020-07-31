@@ -86,14 +86,14 @@ private:
   using CrossoverNode =
       tbb::flow::function_node<std::tuple<DNAPtr, DNAPtr>, DNAPtr>;
   using CrossoverJoinNode = tbb::flow::join_node<std::tuple<DNAPtr, DNAPtr>>;
-
-public:
   using EvaluateThreadSpecificOrGlobalFunction =
       typename GeneratorTraits<EvaluateFG>::ThreadSpecificOrGlobalFunction;
   using MutateThreadSpecificOrGlobalFunction =
       typename GeneratorTraits<MutateFG>::ThreadSpecificOrGlobalFunction;
   using CrossoverThreadSpecificOrGlobalFunction =
       typename GeneratorTraits<CrossoverFG>::ThreadSpecificOrGlobalFunction;
+
+public:
   using Population = std::vector<DNA>;
   using Grades = std::vector<double>;
 
