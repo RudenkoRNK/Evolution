@@ -7,6 +7,7 @@
 #include "tbb/enumerable_thread_specific.h"
 #include "tbb/flow_graph.h"
 #include <boost/test/included/unit_test.hpp>
+#include <random>
 
 using namespace Evolution;
 
@@ -34,7 +35,7 @@ BOOST_AUTO_TEST_CASE(second_test) {
 
   auto env =
       Environment(std::move(Evaluate), std::move(Mutate), std::move(Crossover),
-                  std::move(population), std::move(grades), sf);
+                  std::move(population), std::move(grades), std::move(sf));
   env.Run();
   env.Run();
   env.Run();
@@ -52,4 +53,39 @@ BOOST_AUTO_TEST_CASE(perm_test) {
   std::iota(v.begin(), v.end(), 0);
   Permute(v, perm);
   BOOST_TEST(v == perm);
+}
+
+BOOST_AUTO_TEST_CASE(quadratic_equation) {
+  // Try to solve quadratic equation with guessing
+  // x^2 + bx + c = 0
+  // b = -6, c = 9, x0 = x1 = 3
+  double b = -6;
+  double c = 9;
+  auto Evaluate = [b, c](double x) { return -(x * x + b * x + c); };
+  auto MutateGen = []() {
+    auto gen = std::mt19937(0);
+    auto rand = std::uniform_real_distribution<>();
+    return [gen, rand](double x) mutable { return x * (rand(gen) * 4 - 2); };
+  };
+  auto Crossover = [](double x, double y) { return (x + y) / 2; };
+  auto Generator = []() -> double {
+    auto gen = std::mt19937(0);
+    auto rand = std::uniform_real_distribution<>();
+    return (rand(gen) - 0.5) * 1000000 - 10000;
+  };
+
+  auto N = 100;
+  using Env =
+      Environment<decltype(Evaluate), decltype(MutateGen), decltype(Crossover)>;
+
+  auto population = Env::GeneratePopulation(N, Generator);
+  auto grades = Env::EvaluatePopulation(population, Evaluate);
+  auto sf = Env::GenerateStateFlow(N);
+  auto env = Environment(std::move(Evaluate), std::move(MutateGen),
+                         std::move(Crossover), std::move(population),
+                         std::move(grades), std::move(sf));
+
+  for (auto i = size_t{0}; i < 500; ++i)
+    env.Run();
+  BOOST_TEST(std::abs(env.GetPopulation().at(0) - 3) < 0.000001);
 }

@@ -24,12 +24,11 @@ private:
 
 public:
   Environment(EvaluateFG &&Evaluate, MutateFG &&Mutate, CrossoverFG &&Crossover,
-              Population &&population, Grades &&grades,
-              StateFlow const &stateFlow,
+              Population &&population, Grades &&grades, StateFlow &&stateFlow,
               bool isSwapArgumentsAllowedInCrossover = false)
       : taskFlow(std::forward<EvaluateFG>(Evaluate),
                  std::forward<MutateFG>(Mutate),
-                 std::forward<CrossoverFG>(Crossover), stateFlow,
+                 std::forward<CrossoverFG>(Crossover), std::move(stateFlow),
                  isSwapArgumentsAllowedInCrossover) {
     assert(population.size() == stateFlow.GetNEvaluates());
     this->population = std::move(population);
@@ -79,12 +78,12 @@ public:
 
   static StateFlow GenerateStateFlow(size_t populationSize) {
     // Save top 10%
-    // mutate once top 40%,
+    // mutate once top 30%,
     // Crossover top 5% with next-top 5%
     // Crossover next-top 5% with next-next-top 5%
     // Crossover top 10% with next-top 10%
     // Crossover top 20% with next-top 20%
-    // Crossover top 10% with low 10%
+    // Crossover top 20% with (70-90)% range
     assert(populationSize >= 2);
     auto nLeft = populationSize;
     auto percentsLeft = size_t{100};
@@ -98,12 +97,12 @@ public:
     };
 
     auto nSaves = GetAbsValue(10);
-    auto nMutates = GetAbsValue(40);
+    auto nMutates = GetAbsValue(30);
     auto nCrossovers0 = GetAbsValue(5);
     auto nCrossovers1 = GetAbsValue(5);
     auto nCrossovers2 = GetAbsValue(10);
     auto nCrossovers3 = GetAbsValue(20);
-    auto nCrossovers4 = GetAbsValue(10);
+    auto nCrossovers4 = GetAbsValue(20);
     assert(percentsLeft == 0);
     assert(nLeft == 0);
     assert(nCrossovers0 * 2 <= populationSize);
@@ -122,7 +121,7 @@ public:
                                      sf.GetOrAddInitialState(j)));
     }
     for (auto i = nCrossovers1; i < nCrossovers1 * 2; ++i) {
-      auto j = 3 * nCrossovers1 - i - 1;
+      auto j = 3 * nCrossovers1 - (i - nCrossovers1) - 1;
       sf.SetEvaluate(sf.AddCrossover(sf.GetOrAddInitialState(i),
                                      sf.GetOrAddInitialState(j)));
     }
@@ -137,7 +136,9 @@ public:
                                      sf.GetOrAddInitialState(j)));
     }
     for (auto i = size_t{0}; i < nCrossovers4; ++i) {
-      auto j = populationSize - i - 1;
+      auto j = (populationSize - populationSize / 10) - i - 1;
+      if (i == j)
+        j--;
       sf.SetEvaluate(sf.AddCrossover(sf.GetOrAddInitialState(i),
                                      sf.GetOrAddInitialState(j)));
     }
@@ -149,27 +150,16 @@ public:
 
   template <class DNAGeneratorFunction>
   static Population GeneratePopulation(size_t populationSize,
-                                       DNAGeneratorFunction &DNAGenerator,
-                                       bool isParallel = false) {
+                                       DNAGeneratorFunction &DNAGenerator) {
     auto population = Population{};
     population.reserve(populationSize);
-
-    if (isParallel) {
-      auto populationConcurrent = tbb::concurrent_vector<DNA>{};
-      populationConcurrent.reserve(populationSize);
-      std::generate_n(std::execution::par_unseq,
-                      std::back_inserter(populationConcurrent), populationSize,
-                      DNAGenerator);
-      for (auto &&dna : populationConcurrent)
-        population.push_back(std::move(dna));
-    } else
-      std::generate_n(std::execution::seq, std::back_inserter(population),
-                      populationSize, DNAGenerator);
+    std::generate_n(std::back_inserter(population), populationSize,
+                    DNAGenerator);
     return population;
   }
 
   static Grades EvaluatePopulation(Population const &population,
-                                   EvaluateFG &&Evaluate) {
+                                   EvaluateFG &Evaluate) {
     auto &&EvaluateThreadSpecificOrGlobal =
         GeneratorTraits<EvaluateFG>::GetThreadSpecificOrGlobal(
             std::forward<EvaluateFG>(Evaluate));

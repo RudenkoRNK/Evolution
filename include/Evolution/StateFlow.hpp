@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/dijkstra_shortest_paths.hpp>
+#include <boost/graph/graphviz.hpp>
 #include <boost/property_map/transform_value_property_map.hpp>
 #include <utility>
 #define NOMINMAX
@@ -197,7 +198,6 @@ public:
   bool IsLeaf(State state) const { return GetOutDegree(state) == 0; }
   size_t GetIndex(State state) const {
     auto index = G[state].index;
-    assert(index != UndefinedIndex);
     return index;
   }
   State GetMaxIndexState() const noexcept {
@@ -208,7 +208,7 @@ public:
     return G[operation].operation;
   }
 
-  // Verification
+  // Debug & Verification
   std::optional<State> FindUnevaluatedLeaf() const {
     auto leaf = std::optional<State>{};
     auto IsAllLeavesEval = true;
@@ -227,6 +227,32 @@ public:
     auto nEvaluates = GetNEvaluates();
     return GetNStates() > 0 && GetInitialStates().size() <= nEvaluates &&
            GetIndex(GetMaxIndexState()) < nEvaluates && !FindUnevaluatedLeaf();
+  }
+  void Print(std::ostream &out) {
+    auto VertexWriter = [&](std::ostream &out, State state) {
+      auto index =
+          IsIndexSet(state) ? " (" + std::to_string(GetIndex(state)) + ")" : "";
+      auto shape = IsEvaluate(state) ? "diamond" : "circle";
+      out << "[label=\"" << state << index << "\", ";
+      out << "shape=" << shape << "]";
+    };
+    boost::write_graphviz(out, G, VertexWriter);
+  }
+  template <class IsComputedSet, class IsEvaluatedSet>
+  void Print(std::ostream &out, IsComputedSet const &isComputedSet,
+             IsEvaluatedSet const &isEvaluatedSet) {
+    auto VertexWriter = [&](std::ostream &out, State state) {
+      auto index =
+          IsIndexSet(state) ? " (" + std::to_string(GetIndex(state)) + ")" : "";
+      auto shape = IsEvaluate(state) ? "diamond" : "circle";
+      auto color = isEvaluatedSet.count(state) != 0
+                       ? "green"
+                       : isComputedSet.count(state) != 0 ? "yellow" : "black";
+      out << "[label=\"" << state << index << "\", ";
+      out << "shape=" << shape << ", ";
+      out << "color=" << color << "]";
+    };
+    boost::write_graphviz(out, G, VertexWriter);
   }
 
   // Tools

@@ -19,10 +19,10 @@ template <class FG> struct GeneratorTraits final {
   using ThreadSpecificOrGlobalRefFunction =
       std::conditional_t<isGenerator, ThreadSpecific, Function &>;
 
-  static ThreadSpecificOrGlobalRefFunction
-  GetThreadSpecificOrGlobal(FG &&fg) noexcept(!isGenerator) {
+  static auto GetThreadSpecificOrGlobal(FG &&fg) noexcept(!isGenerator)
+      -> std::conditional_t<isGenerator, ThreadSpecific, FG &&> {
     if constexpr (!isGenerator)
-      return fg;
+      return std::forward<FG>(fg);
     else
       return ThreadSpecific(std::forward<FG>(fg));
   }

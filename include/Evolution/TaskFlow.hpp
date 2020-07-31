@@ -87,7 +87,6 @@ private:
   using CrossoverNode =
       tbb::flow::function_node<std::tuple<DNAPtr, DNAPtr>, DNAPtr>;
   using CrossoverJoinNode = tbb::flow::join_node<std::tuple<DNAPtr, DNAPtr>>;
-  using EvaluateBuffer = tbb::concurrent_vector<std::pair<DNAPtr, double>>;
 
 public:
   using EvaluateThreadSpecificOrGlobalFunction =
@@ -100,20 +99,21 @@ public:
   using Grades = std::vector<double>;
 
   TaskFlow(EvaluateFG &&Evaluate, MutateFG &&Mutate, CrossoverFG &&Crossover,
-           StateFlow const &stateFlow,
-           bool isSwapArgumentsAllowedInCrossover = false) {
+           StateFlow &&stateFlow,
+           bool isSwapArgumentsAllowedInCrossover = false)
+      : EvaluateThreadSpecificOrGlobal(
+            GeneratorTraits<EvaluateFG>::GetThreadSpecificOrGlobal(
+                std::forward<EvaluateFG>(Evaluate))),
+        MutateThreadSpecificOrGlobal(
+            GeneratorTraits<MutateFG>::GetThreadSpecificOrGlobal(
+                std::forward<MutateFG>(Mutate))),
+        CrossoverThreadSpecificOrGlobal(
+            GeneratorTraits<CrossoverFG>::GetThreadSpecificOrGlobal(
+                std::forward<CrossoverFG>(Crossover))) {
     assert(stateFlow.Verify());
     GenerateGraph(stateFlow, isSwapArgumentsAllowedInCrossover);
     nonEvaluateInitialIndices = EvaluateNonEvaluateInitialIndices(stateFlow);
-    EvaluateThreadSpecificOrGlobal =
-        GeneratorTraits<EvaluateFG>::GetThreadSpecificOrGlobal(
-            std::forward<EvaluateFG>(Evaluate));
-    MutateThreadSpecificOrGlobal =
-        GeneratorTraits<MutateFG>::GetThreadSpecificOrGlobal(
-            std::forward<MutateFG>(Mutate));
-    CrossoverThreadSpecificOrGlobal =
-        GeneratorTraits<CrossoverFG>::GetThreadSpecificOrGlobal(
-            std::forward<CrossoverFG>(Crossover));
+    this->stateFlow = std::move(stateFlow);
   }
 
   void Run(Population &population, Grades &grades) {
@@ -124,6 +124,7 @@ public:
 private:
   std::unordered_set<size_t> nonEvaluateInitialIndices;
 
+  StateFlow stateFlow;
   // tbb::flow::graph does not have copy or move assignment
   std::unique_ptr<tbb::flow::graph> graphPtr;
   std::vector<size_t> inputIndices;
@@ -132,7 +133,13 @@ private:
   std::vector<MutateNode> mutateNodes;
   std::vector<CrossoverJoinNode> crossoverJoinNodes;
   std::vector<CrossoverNode> crossoverNodes;
-  tbb::concurrent_vector<std::pair<DNAPtr, double>> evaluateBuffer;
+  tbb::concurrent_unordered_map<DNAPtr, double, std::hash<DNAPtr>>
+      evaluateBuffer;
+#ifndef NDEBUG
+  tbb::concurrent_unordered_map<DNAPtr, size_t, std::hash<DNAPtr>> workBuffer;
+  tbb::concurrent_unordered_set<State> isComputedSet;
+  tbb::concurrent_unordered_set<State> isEvaluatedSet;
+#endif // !NDEBUG
   EvaluateThreadSpecificOrGlobalFunction EvaluateThreadSpecificOrGlobal;
   MutateThreadSpecificOrGlobalFunction MutateThreadSpecificOrGlobal;
   CrossoverThreadSpecificOrGlobalFunction CrossoverThreadSpecificOrGlobal;
@@ -151,21 +158,26 @@ private:
 
   DNAPtr CopyHelper(DNA const &src) const { return DNAPtr(new DNA(src)); }
   DNAPtr MoveHelper(DNA &&src) const { return DNAPtr(new DNA(std::move(src))); }
-  void EvaluateHelper(DNAPtr iSrc, bool isCopy) {
+  void EvaluateHelper(DNAPtr iSrc, bool isCopy, State state) {
     // Actually this functionality should not be used
     assert(!isCopy);
+    CheckRace(iSrc);
+    RegisterEvaluate(state);
+
     if (isCopy)
       iSrc = CopyHelper(*iSrc);
-    assert(evaluateBuffer.capacity() > evaluateBuffer.size());
     auto &&Evaluate = GetEvaluateFunction();
     auto grade = Evaluate(*iSrc);
-    evaluateBuffer.push_back({iSrc, grade});
+    evaluateBuffer.emplace(iSrc, grade);
   }
-  DNAPtr MutateHelper(DNAPtr iSrc, bool isCopy) {
-    auto &&Mutate = GetMutateFunction();
-#ifndef NDEBUG
+  DNAPtr MutateHelper(DNAPtr iSrc, bool isCopy, State state) {
     auto iSrcOrig = iSrc;
-#endif // !NDEBUG
+    if (!isCopy)
+      Register(iSrcOrig);
+    else
+      CheckRace(iSrcOrig);
+    RegisterCompute(state);
+
     auto isCopyHelp = isMutateInPlace && isCopy;
     auto constexpr isMove =
         ArgumentTraits<MutateFunction>::template isRValueReference<1> ||
@@ -174,11 +186,7 @@ private:
     if (isCopyHelp)
       iSrc = CopyHelper(*iSrc);
 
-    assert(isCopy || std::find_if(evaluateBuffer.begin(), evaluateBuffer.end(),
-                                  [&](auto const &pair) {
-                                    return pair.first == iSrcOrig;
-                                  }) == evaluateBuffer.end());
-
+    auto &&Mutate = GetMutateFunction();
     auto MutatePtr = [&](DNAPtr iSrc) {
       if constexpr (isMove) {
         assert(!isCopy || iSrcOrig != iSrc);
@@ -193,27 +201,37 @@ private:
     if (!isPtrMove)
       return MoveHelper(std::move(dst));
     *iSrc = std::move(dst);
+
+    if (!isCopy)
+      Unregister(iSrcOrig);
     return iSrc;
   }
   DNAPtr CrossoverHelper(std::tuple<DNAPtr, DNAPtr> iSrcs, bool isCopy0,
-                         bool isCopy1, bool isSwapArgumentsAllowed) {
-    auto &&Crossover = GetCrossoverFunction();
+                         bool isCopy1, bool isSwapArgumentsAllowed,
+                         State state) {
+    auto iSrc0 = std::get<0>(iSrcs);
+    auto iSrc1 = std::get<1>(iSrcs);
+    auto iSrcOrig0 = iSrc0;
+    auto iSrcOrig1 = iSrc1;
+    if (!isCopy0)
+      Register(iSrcOrig0);
+    else
+      CheckRace(iSrcOrig0);
+    if (!isCopy1)
+      Register(iSrcOrig1);
+    else
+      CheckRace(iSrcOrig1);
+    RegisterCompute(state);
+
     auto isSwap = ((isCrossoverInPlaceFirst && !isCrossoverInPlaceSecond &&
                     isCopy0 && !isCopy1) ||
                    (isCrossoverInPlaceSecond && !isCrossoverInPlaceFirst &&
                     isCopy1 && !isCopy0)) &&
                   isSwapArgumentsAllowed;
-    auto iSrc0 = std::get<0>(iSrcs);
-    auto iSrc1 = std::get<1>(iSrcs);
     if (isSwap) {
       iSrc0.swap(iSrc1);
       std::swap(isCopy0, isCopy1);
     }
-#ifndef NDEBUG
-    auto iSrcOrig0 = iSrc0;
-    auto iSrcOrig1 = iSrc1;
-#endif // !NDEBUG
-
     auto isCopyHelp0 = isCrossoverInPlaceFirst && isCopy0;
     auto isCopyHelp1 = isCrossoverInPlaceSecond && isCopy1;
     auto constexpr isMove0 =
@@ -230,16 +248,7 @@ private:
     if (isCopyHelp1)
       iSrc1 = CopyHelper(*iSrc1);
 
-    assert(isCopy0 || std::find_if(evaluateBuffer.begin(), evaluateBuffer.end(),
-                                   [&](auto const &pair) {
-                                     return pair.first == iSrcOrig0;
-                                   }) == evaluateBuffer.end());
-
-    assert(isCopy1 || std::find_if(evaluateBuffer.begin(), evaluateBuffer.end(),
-                                   [&](auto const &pair) {
-                                     return pair.first == iSrcOrig1;
-                                   }) == evaluateBuffer.end());
-
+    auto &&Crossover = GetCrossoverFunction();
     auto CrossoverPtr = [&](DNAPtr iSrc0, DNAPtr iSrc1) {
       if constexpr (isMove0) {
         assert(!isCopy0 || iSrcOrig0 != iSrc0);
@@ -282,39 +291,49 @@ private:
       return iSrc1;
     }
     *iSrc0 = std::move(dst);
+
+    if (!isCopy0)
+      Unregister(iSrcOrig0);
+    if (!isCopy1)
+      Unregister(iSrcOrig1);
     return iSrc0;
   }
 
-  InputNode &AddInput(size_t index) {
+  InputNode &AddInput(size_t index, State state) {
     // Should be preallocated to avoid refs invalidation
     assert(inputNodes.capacity() > inputNodes.size());
     inputIndices.push_back(index);
     // Could be implemented with MoveHelper in some cases, but this approach is
     // exception-safe for the Population
-    inputNodes.push_back(
-        InputNode(*graphPtr, tbb::flow::concurrency::serial,
-                  [&](DNA const *dna) { return CopyHelper(*dna); }));
+    inputNodes.push_back(InputNode(*graphPtr, tbb::flow::concurrency::serial,
+                                   [&, state](DNA const *dna) {
+                                     RegisterCompute(state);
+                                     return CopyHelper(*dna);
+                                   }));
     assert(inputIndices.size() == inputNodes.size());
     return inputNodes.back();
   }
   template <class Node>
-  EvaluateNode &AddEvaluate(Node &predecessor, bool isCopy = false) {
+  EvaluateNode &AddEvaluate(Node &predecessor, bool isCopy, State state) {
     // Should be preallocated to avoid refs invalidation
     assert(evaluateNodes.capacity() > evaluateNodes.size());
-    evaluateNodes.push_back(EvaluateNode(
-        *graphPtr, tbb::flow::concurrency::serial, [&, isCopy](DNAPtr iSrc) {
-          EvaluateHelper(iSrc, isCopy);
-          return 0;
-        }));
+    evaluateNodes.push_back(EvaluateNode(*graphPtr,
+                                         tbb::flow::concurrency::serial,
+                                         [&, isCopy, state](DNAPtr iSrc) {
+                                           EvaluateHelper(iSrc, isCopy, state);
+                                           return 0;
+                                         }));
     tbb::flow::make_edge(predecessor, evaluateNodes.back());
     return evaluateNodes.back();
   }
-  template <class Node> MutateNode &AddMutate(Node &predecessor, bool isCopy) {
+  template <class Node>
+  MutateNode &AddMutate(Node &predecessor, bool isCopy, State state) {
     // Should be preallocated to avoid refs invalidation
     assert(mutateNodes.capacity() > mutateNodes.size());
-    mutateNodes.push_back(MutateNode(
-        *graphPtr, tbb::flow::concurrency::serial,
-        [&, isCopy](DNAPtr iSrc) { return MutateHelper(iSrc, isCopy); }));
+    mutateNodes.push_back(MutateNode(*graphPtr, tbb::flow::concurrency::serial,
+                                     [&, isCopy, state](DNAPtr iSrc) {
+                                       return MutateHelper(iSrc, isCopy, state);
+                                     }));
     tbb::flow::make_edge(predecessor, mutateNodes.back());
     return mutateNodes.back();
   }
@@ -322,15 +341,15 @@ private:
   template <class Node0, class Node1>
   CrossoverNode &AddCrossover(Node0 &predecessor0, Node1 &predecessor1,
                               bool isCopy0, bool isCopy1,
-                              bool isSwapArgumentsAllowed) {
+                              bool isSwapArgumentsAllowed, State state) {
     // Should be preallocated to avoid refs invalidation
     assert(crossoverNodes.capacity() > crossoverNodes.size());
     crossoverNodes.push_back(
         CrossoverNode(*graphPtr, tbb::flow::concurrency::serial,
-                      [&, isCopy0, isCopy1, isSwapArgumentsAllowed](
-                          std::tuple<DNAPtr, DNAPtr> iSrcs) {
+                      [&, isCopy0, isCopy1, isSwapArgumentsAllowed,
+                       state](std::tuple<DNAPtr, DNAPtr> iSrcs) {
                         return CrossoverHelper(iSrcs, isCopy0, isCopy1,
-                                               isSwapArgumentsAllowed);
+                                               isSwapArgumentsAllowed, state);
                       }));
     crossoverJoinNodes.push_back(CrossoverJoinNode(*graphPtr));
     assert(crossoverJoinNodes.size() == crossoverNodes.size());
@@ -361,12 +380,11 @@ private:
     mutateNodes.reserve(stateFlow.GetNMutates());
     crossoverJoinNodes.reserve(stateFlow.GetNCrossovers());
     crossoverNodes.reserve(stateFlow.GetNCrossovers());
-    evaluateBuffer.reserve(stateFlow.GetNEvaluates() -
-                           stateFlow.GetNInitialEvaluates());
 
     auto nodes = std::unordered_map<State, NodeRef>{};
 
 #ifndef NDEBUG
+    auto resolvedEvaluates = std::unordered_set<State>{};
     auto maxIterations = stateFlow.GetNStates() + 1;
     auto whileGuard = size_t{0};
     auto evaluateCount = size_t{0};
@@ -396,7 +414,7 @@ private:
     auto ResolveInitial = [&](State state) {
       assert(!IsResolved(state) && IsResolvable(state));
       assert(stateFlow.IsInitialState(state));
-      auto &&node = AddInput(stateFlow.GetIndex(state));
+      auto &&node = AddInput(stateFlow.GetIndex(state), state);
       nodes.emplace(state, NodeRef(InputNodeIndex, std::ref(node)));
     };
     auto ResolveMutate = [&](State state) {
@@ -407,7 +425,8 @@ private:
       auto &&parentNodeVar = nodes.at(parent);
       std::visit(
           [&](auto parentNodeRef) {
-            auto &&node = AddMutate(parentNodeRef.get(), IsCopyRequired(op));
+            auto &&node =
+                AddMutate(parentNodeRef.get(), IsCopyRequired(op), state);
             nodes.emplace(state, NodeRef(MutateNodeIndex, std::ref(node)));
           },
           parentNodeVar);
@@ -427,7 +446,7 @@ private:
                   auto &&node =
                       AddCrossover(parentNodeRef0.get(), parentNodeRef1.get(),
                                    IsCopyRequired(op0), IsCopyRequired(op1),
-                                   isSwapArgumentsAllowedInCrossover);
+                                   isSwapArgumentsAllowedInCrossover, state);
                   nodes.emplace(state,
                                 NodeRef(CrossoverNodeIndex, std::ref(node)));
                 },
@@ -438,12 +457,16 @@ private:
     auto ResolveEvaluate = [&](State state) {
       assert(stateFlow.IsEvaluate(state));
 #ifndef NDEBUG
+      assert(!resolvedEvaluates.contains(state));
+      resolvedEvaluates.insert(state);
       evaluateCount++;
 #endif // !NDEBUG
       if (stateFlow.IsInitialState(state))
         return;
       std::visit(
-          [&](auto nodeRef) { AddEvaluate(nodeRef.get(), /*isCopy*/ false); },
+          [&](auto nodeRef) {
+            AddEvaluate(nodeRef.get(), /*isCopy*/ false, state);
+          },
           nodes.at(state));
     };
 
@@ -486,12 +509,18 @@ private:
   }
 
   size_t GetPopulationSize() const noexcept {
-    return evaluateNodes.size() + nonEvaluateInitialIndices.size();
+    return stateFlow.GetNEvaluates();
   }
 
   void RunTaskFlow(Population const &population) {
     assert(population.size() == GetPopulationSize());
+#ifndef NDEBUG
+    workBuffer.clear();
+    isComputedSet.clear();
+    isEvaluatedSet.clear();
+#endif // !NDEBUG
     evaluateBuffer.clear();
+
     for (auto i = size_t{0}; i < inputNodes.size(); ++i)
       inputNodes.at(i).try_put(&population.at(inputIndices.at(i)));
     (*graphPtr).wait_for_all();
@@ -501,12 +530,89 @@ private:
     assert(evaluateBuffer.size() == nonEvaluateInitialIndices.size());
     assert(population.size() == GetPopulationSize());
     assert(grades.size() == GetPopulationSize());
-    auto i = size_t{0};
-    for (auto index : nonEvaluateInitialIndices) {
-      population.at(index) = std::move(*evaluateBuffer.at(i).first);
-      grades.at(index) = std::move(evaluateBuffer.at(i).second);
-      ++i;
+
+    auto ebIt = evaluateBuffer.begin();
+    auto idxIt = nonEvaluateInitialIndices.begin();
+    for (auto i = size_t{0}, e = evaluateBuffer.size(); i != e; ++i) {
+      auto index = *idxIt;
+      auto [dnaPtr, grade] = *ebIt;
+      population.at(index) = std::move(*dnaPtr);
+      grades.at(index) = grade;
+      ++ebIt;
+      ++idxIt;
     }
+  }
+
+  // Debug functions
+  void Register(DNAPtr dnaPtr) {
+#ifndef NDEBUG
+    CheckRace(dnaPtr);
+    if (workBuffer.count(dnaPtr) > 0)
+      ++workBuffer.at(dnaPtr);
+    else
+      workBuffer.emplace(dnaPtr, 1);
+    assert(workBuffer.at(dnaPtr) == 1);
+#endif // !NDEBUG
+  }
+  void Unregister(DNAPtr dnaPtr) {
+#ifndef NDEBUG
+    --workBuffer.at(dnaPtr);
+    assert(workBuffer.at(dnaPtr) == 0);
+#endif // !NDEBUG
+  }
+  void CheckRace(DNAPtr dnaPtr) {
+#ifndef NDEBUG
+    if (evaluateBuffer.count(dnaPtr) > 0) {
+      std::cerr << "Found DNA which is going to be modified, "
+                   "but it is already reserved for final evaluate"
+                << std::endl;
+      std::cerr << "Evaluate buffer size: " << evaluateBuffer.size()
+                << std::endl;
+      std::cerr << "Element address: " << dnaPtr << std::endl;
+      DumpStateFlow();
+      assert(false);
+    }
+    if (workBuffer.count(dnaPtr) > 0 && workBuffer.at(dnaPtr) > 0) {
+      std::cerr << "Found DNA which is going to be modified by one operation, "
+                   "but it is currently in progress in another operation"
+                << std::endl;
+      std::cerr << "Work buffer size: " << workBuffer.size() << std::endl;
+      std::cerr << "Element address: " << dnaPtr << std::endl;
+      DumpStateFlow();
+      assert(false);
+    }
+#endif // !NDEBUG
+  }
+  void RegisterCompute(State state) {
+#ifndef NDEBUG
+    assert(isEvaluatedSet.count(state) == 0 &&
+           "Somehow evaluate happened before compute...");
+    if (isComputedSet.count(state) != 0) {
+      std::cout << "Found an attempt to compute same node twice!";
+      DumpStateFlow();
+      assert(false);
+    }
+    isComputedSet.insert(state);
+#endif // !NDEBUG
+  }
+  void RegisterEvaluate(State state) {
+#ifndef NDEBUG
+    assert(isComputedSet.count(state) != 0 &&
+           "Somehow evaluate is happening before compute...");
+    if (isEvaluatedSet.count(state) != 0) {
+      std::cout << "Found an attempt to evaluate same node twice!";
+      DumpStateFlow();
+      assert(false);
+    }
+    isEvaluatedSet.insert(state);
+#endif // !NDEBUG
+  }
+  void DumpStateFlow() {
+#ifndef NDEBUG
+    auto dump = std::ofstream("dump.dot");
+    stateFlow.Print(dump, isComputedSet, isEvaluatedSet);
+    dump.close();
+#endif // !NDEBUG
   }
 };
 
