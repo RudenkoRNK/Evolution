@@ -87,5 +87,12 @@ BOOST_AUTO_TEST_CASE(quadratic_equation) {
 
   for (auto i = size_t{0}; i < 500; ++i)
     env.Run();
+
+  sf = StateFlow{};
+  for (auto i = size_t{0}; i < N; ++i)
+    sf.SetEvaluate(sf.GetOrAddInitialState(i));
+  env.SetStateFlow(std::move(sf));
+  env.Run();
+
   BOOST_TEST(std::abs(env.GetPopulation().at(0) - 3) < 0.000001);
 }

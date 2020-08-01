@@ -76,6 +76,13 @@ public:
     Permute(grades, permutation, Index, buffer);
   }
 
+  void SetStateFlow(StateFlow &&stateFlow,
+                    bool isSwapArgumentsAllowedInCrossover = false) {
+    assert(population.size() == stateFlow.GetNEvaluates());
+    taskFlow.SetStateFlow(std::move(stateFlow),
+                          isSwapArgumentsAllowedInCrossover);
+  }
+
   static StateFlow GenerateStateFlow(size_t populationSize) {
     // Save top 10%
     // mutate once top 30%,

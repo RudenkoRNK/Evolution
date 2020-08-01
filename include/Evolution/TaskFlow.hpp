@@ -93,13 +93,25 @@ private:
   using CrossoverThreadSpecificOrGlobalFunction =
       typename GeneratorTraits<CrossoverFG>::ThreadSpecificOrGlobalFunction;
 
+  struct TBBFlow {
+    StateFlow stateFlow;
+    // tbb::flow::graph does not have copy or move assignment
+    std::unique_ptr<tbb::flow::graph> graphPtr;
+    std::vector<size_t> inputIndices;
+    std::vector<InputNode> inputNodes;
+    std::vector<EvaluateNode> evaluateNodes;
+    std::vector<MutateNode> mutateNodes;
+    std::vector<CrossoverJoinNode> crossoverJoinNodes;
+    std::vector<CrossoverNode> crossoverNodes;
+    std::unordered_set<size_t> nonEvaluateInitialIndices;
+  };
+
 public:
   using Population = std::vector<DNA>;
   using Grades = std::vector<double>;
 
   TaskFlow(EvaluateFG &&Evaluate, MutateFG &&Mutate, CrossoverFG &&Crossover,
-           StateFlow &&stateFlow,
-           bool isSwapArgumentsAllowedInCrossover = false)
+           StateFlow &&stateFlow, bool isSwapArgumentsAllowedInCrossover)
       : EvaluateThreadSpecificOrGlobal(
             GeneratorTraits<EvaluateFG>::GetThreadSpecificOrGlobal(
                 std::forward<EvaluateFG>(Evaluate))),
@@ -109,39 +121,41 @@ public:
         CrossoverThreadSpecificOrGlobal(
             GeneratorTraits<CrossoverFG>::GetThreadSpecificOrGlobal(
                 std::forward<CrossoverFG>(Crossover))) {
-    assert(stateFlow.Verify());
-    GenerateGraph(stateFlow, isSwapArgumentsAllowedInCrossover);
-    nonEvaluateInitialIndices = EvaluateNonEvaluateInitialIndices(stateFlow);
-    this->stateFlow = std::move(stateFlow);
+    SetStateFlow(std::move(stateFlow), isSwapArgumentsAllowedInCrossover);
   }
 
   void Run(Population &population, Grades &grades) {
     RunTaskFlow(population);
     MoveResultsFromBuffer(population, grades);
   }
+  void SetStateFlow(StateFlow &&stateFlow,
+                    bool isSwapArgumentsAllowedInCrossover) {
+    assert(stateFlow.Verify());
+    auto tbbFlow = GenerateGraph(stateFlow, isSwapArgumentsAllowedInCrossover);
+    tbbFlow.nonEvaluateInitialIndices =
+        EvaluateNonEvaluateInitialIndices(stateFlow);
+    tbbFlow.stateFlow = std::move(stateFlow);
+
+    this->tbbFlow.inputNodes.clear();
+    this->tbbFlow.evaluateNodes.clear();
+    this->tbbFlow.mutateNodes.clear();
+    this->tbbFlow.crossoverJoinNodes.clear();
+    this->tbbFlow.crossoverNodes.clear();
+    this->tbbFlow = std::move(tbbFlow);
+  }
 
 private:
-  std::unordered_set<size_t> nonEvaluateInitialIndices;
-
-  StateFlow stateFlow;
-  // tbb::flow::graph does not have copy or move assignment
-  std::unique_ptr<tbb::flow::graph> graphPtr;
-  std::vector<size_t> inputIndices;
-  std::vector<InputNode> inputNodes;
-  std::vector<EvaluateNode> evaluateNodes;
-  std::vector<MutateNode> mutateNodes;
-  std::vector<CrossoverJoinNode> crossoverJoinNodes;
-  std::vector<CrossoverNode> crossoverNodes;
+  TBBFlow tbbFlow;
   tbb::concurrent_unordered_map<DNAPtr, double, std::hash<DNAPtr>>
       evaluateBuffer;
+  EvaluateThreadSpecificOrGlobalFunction EvaluateThreadSpecificOrGlobal;
+  MutateThreadSpecificOrGlobalFunction MutateThreadSpecificOrGlobal;
+  CrossoverThreadSpecificOrGlobalFunction CrossoverThreadSpecificOrGlobal;
 #ifndef NDEBUG
   tbb::concurrent_unordered_map<DNAPtr, size_t, std::hash<DNAPtr>> workBuffer;
   tbb::concurrent_unordered_set<State> isComputedSet;
   tbb::concurrent_unordered_set<State> isEvaluatedSet;
 #endif // !NDEBUG
-  EvaluateThreadSpecificOrGlobalFunction EvaluateThreadSpecificOrGlobal;
-  MutateThreadSpecificOrGlobalFunction MutateThreadSpecificOrGlobal;
-  CrossoverThreadSpecificOrGlobalFunction CrossoverThreadSpecificOrGlobal;
 
   EvaluateFunction &GetEvaluateFunction() {
     return GeneratorTraits<EvaluateFG>::GetFunction(
@@ -298,70 +312,74 @@ private:
     return iSrc0;
   }
 
-  InputNode &AddInput(size_t index, State state) {
+  InputNode &AddInput(TBBFlow &tbbFlow, size_t index, State state) {
     // Should be preallocated to avoid refs invalidation
-    assert(inputNodes.capacity() > inputNodes.size());
-    inputIndices.push_back(index);
+    assert(tbbFlow.inputNodes.capacity() > tbbFlow.inputNodes.size());
+    tbbFlow.inputIndices.push_back(index);
     // Could be implemented with MoveHelper in some cases, but this approach is
     // exception-safe for the Population
-    inputNodes.push_back(InputNode(*graphPtr, tbb::flow::concurrency::serial,
-                                   [&, state](DNA const *dna) {
-                                     RegisterCompute(state);
-                                     return CopyHelper(*dna);
-                                   }));
-    assert(inputIndices.size() == inputNodes.size());
-    return inputNodes.back();
+    tbbFlow.inputNodes.push_back(InputNode(*tbbFlow.graphPtr,
+                                           tbb::flow::concurrency::serial,
+                                           [&, state](DNA const *dna) {
+                                             RegisterCompute(state);
+                                             return CopyHelper(*dna);
+                                           }));
+    assert(tbbFlow.inputIndices.size() == tbbFlow.inputNodes.size());
+    return tbbFlow.inputNodes.back();
   }
   template <class Node>
-  EvaluateNode &AddEvaluate(Node &predecessor, bool isCopy, State state) {
+  EvaluateNode &AddEvaluate(TBBFlow &tbbFlow, Node &predecessor, bool isCopy,
+                            State state) {
     // Should be preallocated to avoid refs invalidation
-    assert(evaluateNodes.capacity() > evaluateNodes.size());
-    evaluateNodes.push_back(EvaluateNode(*graphPtr,
-                                         tbb::flow::concurrency::serial,
-                                         [&, isCopy, state](DNAPtr iSrc) {
-                                           EvaluateHelper(iSrc, isCopy, state);
-                                           return 0;
-                                         }));
-    tbb::flow::make_edge(predecessor, evaluateNodes.back());
-    return evaluateNodes.back();
+    assert(tbbFlow.evaluateNodes.capacity() > tbbFlow.evaluateNodes.size());
+    tbbFlow.evaluateNodes.push_back(
+        EvaluateNode(*tbbFlow.graphPtr, tbb::flow::concurrency::serial,
+                     [&, isCopy, state](DNAPtr iSrc) {
+                       EvaluateHelper(iSrc, isCopy, state);
+                       return 0;
+                     }));
+    tbb::flow::make_edge(predecessor, tbbFlow.evaluateNodes.back());
+    return tbbFlow.evaluateNodes.back();
   }
   template <class Node>
-  MutateNode &AddMutate(Node &predecessor, bool isCopy, State state) {
+  MutateNode &AddMutate(TBBFlow &tbbFlow, Node &predecessor, bool isCopy,
+                        State state) {
     // Should be preallocated to avoid refs invalidation
-    assert(mutateNodes.capacity() > mutateNodes.size());
-    mutateNodes.push_back(MutateNode(*graphPtr, tbb::flow::concurrency::serial,
-                                     [&, isCopy, state](DNAPtr iSrc) {
-                                       return MutateHelper(iSrc, isCopy, state);
-                                     }));
-    tbb::flow::make_edge(predecessor, mutateNodes.back());
-    return mutateNodes.back();
+    assert(tbbFlow.mutateNodes.capacity() > tbbFlow.mutateNodes.size());
+    tbbFlow.mutateNodes.push_back(
+        MutateNode(*tbbFlow.graphPtr, tbb::flow::concurrency::serial,
+                   [&, isCopy, state](DNAPtr iSrc) {
+                     return MutateHelper(iSrc, isCopy, state);
+                   }));
+    tbb::flow::make_edge(predecessor, tbbFlow.mutateNodes.back());
+    return tbbFlow.mutateNodes.back();
   }
-
   template <class Node0, class Node1>
-  CrossoverNode &AddCrossover(Node0 &predecessor0, Node1 &predecessor1,
-                              bool isCopy0, bool isCopy1,
+  CrossoverNode &AddCrossover(TBBFlow &tbbFlow, Node0 &predecessor0,
+                              Node1 &predecessor1, bool isCopy0, bool isCopy1,
                               bool isSwapArgumentsAllowed, State state) {
     // Should be preallocated to avoid refs invalidation
-    assert(crossoverNodes.capacity() > crossoverNodes.size());
-    crossoverNodes.push_back(
-        CrossoverNode(*graphPtr, tbb::flow::concurrency::serial,
+    assert(tbbFlow.crossoverNodes.capacity() > tbbFlow.crossoverNodes.size());
+    tbbFlow.crossoverNodes.push_back(
+        CrossoverNode(*tbbFlow.graphPtr, tbb::flow::concurrency::serial,
                       [&, isCopy0, isCopy1, isSwapArgumentsAllowed,
                        state](std::tuple<DNAPtr, DNAPtr> iSrcs) {
                         return CrossoverHelper(iSrcs, isCopy0, isCopy1,
                                                isSwapArgumentsAllowed, state);
                       }));
-    crossoverJoinNodes.push_back(CrossoverJoinNode(*graphPtr));
-    assert(crossoverJoinNodes.size() == crossoverNodes.size());
+    tbbFlow.crossoverJoinNodes.push_back(CrossoverJoinNode(*tbbFlow.graphPtr));
+    assert(tbbFlow.crossoverJoinNodes.size() == tbbFlow.crossoverNodes.size());
     tbb::flow::make_edge(predecessor0,
-                         input_port<0>(crossoverJoinNodes.back()));
+                         input_port<0>(tbbFlow.crossoverJoinNodes.back()));
     tbb::flow::make_edge(predecessor1,
-                         input_port<1>(crossoverJoinNodes.back()));
-    tbb::flow::make_edge(crossoverJoinNodes.back(), crossoverNodes.back());
-    return crossoverNodes.back();
+                         input_port<1>(tbbFlow.crossoverJoinNodes.back()));
+    tbb::flow::make_edge(tbbFlow.crossoverJoinNodes.back(),
+                         tbbFlow.crossoverNodes.back());
+    return tbbFlow.crossoverNodes.back();
   }
 
-  void GenerateGraph(StateFlow const &stateFlow,
-                     bool isSwapArgumentsAllowedInCrossover) {
+  TBBFlow GenerateGraph(StateFlow const &stateFlow,
+                        bool isSwapArgumentsAllowedInCrossover) {
     using InputNodeRef = std::reference_wrapper<InputNode>;
     using MutateNodeRef = std::reference_wrapper<MutateNode>;
     using CrossoverNodeRef = std::reference_wrapper<CrossoverNode>;
@@ -370,15 +388,18 @@ private:
     auto constexpr CrossoverNodeIndex = std::in_place_index<2>;
     using NodeRef = std::variant<InputNodeRef, MutateNodeRef, CrossoverNodeRef>;
 
-    graphPtr = std::unique_ptr<tbb::flow::graph>(new tbb::flow::graph{});
+    auto tbbFlow = TBBFlow{};
 
-    inputIndices.reserve(stateFlow.GetInitialStates().size());
-    inputNodes.reserve(stateFlow.GetInitialStates().size());
-    evaluateNodes.reserve(stateFlow.GetNEvaluates() -
-                          stateFlow.GetNInitialEvaluates());
-    mutateNodes.reserve(stateFlow.GetNMutates());
-    crossoverJoinNodes.reserve(stateFlow.GetNCrossovers());
-    crossoverNodes.reserve(stateFlow.GetNCrossovers());
+    tbbFlow.graphPtr =
+        std::unique_ptr<tbb::flow::graph>(new tbb::flow::graph{});
+
+    tbbFlow.inputIndices.reserve(stateFlow.GetInitialStates().size());
+    tbbFlow.inputNodes.reserve(stateFlow.GetInitialStates().size());
+    tbbFlow.evaluateNodes.reserve(stateFlow.GetNEvaluates() -
+                                  stateFlow.GetNInitialEvaluates());
+    tbbFlow.mutateNodes.reserve(stateFlow.GetNMutates());
+    tbbFlow.crossoverJoinNodes.reserve(stateFlow.GetNCrossovers());
+    tbbFlow.crossoverNodes.reserve(stateFlow.GetNCrossovers());
 
     auto nodes = std::unordered_map<State, NodeRef>{};
 
@@ -413,7 +434,7 @@ private:
     auto ResolveInitial = [&](State state) {
       assert(!IsResolved(state) && IsResolvable(state));
       assert(stateFlow.IsInitialState(state));
-      auto &&node = AddInput(stateFlow.GetIndex(state), state);
+      auto &&node = AddInput(tbbFlow, stateFlow.GetIndex(state), state);
       nodes.emplace(state, NodeRef(InputNodeIndex, std::ref(node)));
     };
     auto ResolveMutate = [&](State state) {
@@ -424,8 +445,8 @@ private:
       auto &&parentNodeVar = nodes.at(parent);
       std::visit(
           [&](auto parentNodeRef) {
-            auto &&node =
-                AddMutate(parentNodeRef.get(), IsCopyRequired(op), state);
+            auto &&node = AddMutate(tbbFlow, parentNodeRef.get(),
+                                    IsCopyRequired(op), state);
             nodes.emplace(state, NodeRef(MutateNodeIndex, std::ref(node)));
           },
           parentNodeVar);
@@ -442,10 +463,10 @@ private:
           [&](auto parentNodeRef0) {
             std::visit(
                 [&](auto parentNodeRef1) {
-                  auto &&node =
-                      AddCrossover(parentNodeRef0.get(), parentNodeRef1.get(),
-                                   IsCopyRequired(op0), IsCopyRequired(op1),
-                                   isSwapArgumentsAllowedInCrossover, state);
+                  auto &&node = AddCrossover(
+                      tbbFlow, parentNodeRef0.get(), parentNodeRef1.get(),
+                      IsCopyRequired(op0), IsCopyRequired(op1),
+                      isSwapArgumentsAllowedInCrossover, state);
                   nodes.emplace(state,
                                 NodeRef(CrossoverNodeIndex, std::ref(node)));
                 },
@@ -464,7 +485,7 @@ private:
         return;
       std::visit(
           [&](auto nodeRef) {
-            AddEvaluate(nodeRef.get(), /*isCopy*/ false, state);
+            AddEvaluate(tbbFlow, nodeRef.get(), /*isCopy*/ false, state);
           },
           nodes.at(state));
     };
@@ -494,10 +515,12 @@ private:
     }
     assert(nodes.size() == stateFlow.GetNStates());
     assert(evaluateCount == stateFlow.GetNEvaluates());
+
+    return tbbFlow;
   }
 
-  std::unordered_set<size_t>
-  EvaluateNonEvaluateInitialIndices(StateFlow const &stateFlow) const {
+  static std::unordered_set<size_t>
+  EvaluateNonEvaluateInitialIndices(StateFlow const &stateFlow) {
     auto availableIndices = std::unordered_set<size_t>{};
     for (auto i = size_t{0}; i < stateFlow.GetNEvaluates(); ++i)
       availableIndices.insert(i);
@@ -508,7 +531,7 @@ private:
   }
 
   size_t GetPopulationSize() const noexcept {
-    return stateFlow.GetNEvaluates();
+    return tbbFlow.stateFlow.GetNEvaluates();
   }
 
   void RunTaskFlow(Population const &population) {
@@ -520,18 +543,19 @@ private:
 #endif // !NDEBUG
     evaluateBuffer.clear();
 
-    for (auto i = size_t{0}; i < inputNodes.size(); ++i)
-      inputNodes.at(i).try_put(&population.at(inputIndices.at(i)));
-    (*graphPtr).wait_for_all();
+    for (auto i = size_t{0}; i < tbbFlow.inputNodes.size(); ++i)
+      tbbFlow.inputNodes.at(i).try_put(
+          &population.at(tbbFlow.inputIndices.at(i)));
+    (*tbbFlow.graphPtr).wait_for_all();
   }
 
   void MoveResultsFromBuffer(Population &population, Grades &grades) noexcept {
-    assert(evaluateBuffer.size() == nonEvaluateInitialIndices.size());
+    assert(evaluateBuffer.size() == tbbFlow.nonEvaluateInitialIndices.size());
     assert(population.size() == GetPopulationSize());
     assert(grades.size() == GetPopulationSize());
 
     auto ebIt = evaluateBuffer.begin();
-    auto idxIt = nonEvaluateInitialIndices.begin();
+    auto idxIt = tbbFlow.nonEvaluateInitialIndices.begin();
     for (auto i = size_t{0}, e = evaluateBuffer.size(); i != e; ++i) {
       auto index = *idxIt;
       auto [dnaPtr, grade] = *ebIt;
@@ -609,7 +633,7 @@ private:
   void DumpStateFlow() {
 #ifndef NDEBUG
     auto dump = std::ofstream("dump.dot");
-    stateFlow.Print(dump, isComputedSet, isEvaluatedSet);
+    tbbFlow.stateFlow.Print(dump, isComputedSet, isEvaluatedSet);
     dump.close();
 #endif // !NDEBUG
   }
