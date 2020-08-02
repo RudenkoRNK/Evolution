@@ -112,7 +112,8 @@ public:
 
   TaskFlow(EvaluateFG &&Evaluate, MutateFG &&Mutate, CrossoverFG &&Crossover,
            StateFlow &&stateFlow, bool isSwapArgumentsAllowedInCrossover)
-      : EvaluateThreadSpecificOrGlobal(
+      : tbbFlow(GenerateTBBFlow(stateFlow, isSwapArgumentsAllowedInCrossover)),
+        EvaluateThreadSpecificOrGlobal(
             GeneratorTraits<EvaluateFG>::GetThreadSpecificOrGlobal(
                 std::forward<EvaluateFG>(Evaluate))),
         MutateThreadSpecificOrGlobal(
@@ -121,7 +122,7 @@ public:
         CrossoverThreadSpecificOrGlobal(
             GeneratorTraits<CrossoverFG>::GetThreadSpecificOrGlobal(
                 std::forward<CrossoverFG>(Crossover))) {
-    SetStateFlow(std::move(stateFlow), isSwapArgumentsAllowedInCrossover);
+    tbbFlow.stateFlow = std::move(stateFlow);
   }
 
   void Run(Population &population, Grades &grades) {
@@ -130,18 +131,15 @@ public:
   }
   void SetStateFlow(StateFlow &&stateFlow,
                     bool isSwapArgumentsAllowedInCrossover) {
-    assert(stateFlow.Verify());
-    auto tbbFlow = GenerateGraph(stateFlow, isSwapArgumentsAllowedInCrossover);
-    tbbFlow.nonEvaluateInitialIndices =
-        EvaluateNonEvaluateInitialIndices(stateFlow);
+    auto tbbFlow_ =
+        GenerateTBBFlow(stateFlow, isSwapArgumentsAllowedInCrossover);
+    tbbFlow.inputNodes.clear();
+    tbbFlow.evaluateNodes.clear();
+    tbbFlow.mutateNodes.clear();
+    tbbFlow.crossoverJoinNodes.clear();
+    tbbFlow.crossoverNodes.clear();
+    tbbFlow = std::move(tbbFlow_);
     tbbFlow.stateFlow = std::move(stateFlow);
-
-    this->tbbFlow.inputNodes.clear();
-    this->tbbFlow.evaluateNodes.clear();
-    this->tbbFlow.mutateNodes.clear();
-    this->tbbFlow.crossoverJoinNodes.clear();
-    this->tbbFlow.crossoverNodes.clear();
-    this->tbbFlow = std::move(tbbFlow);
   }
 
 private:
@@ -378,6 +376,14 @@ private:
     return tbbFlow.crossoverNodes.back();
   }
 
+  TBBFlow GenerateTBBFlow(StateFlow const &stateFlow,
+                          bool isSwapArgumentsAllowedInCrossover) {
+    assert(stateFlow.Verify());
+    auto tbbFlow = GenerateGraph(stateFlow, isSwapArgumentsAllowedInCrossover);
+    tbbFlow.nonEvaluateInitialIndices =
+        EvaluateNonEvaluateInitialIndices(stateFlow);
+    return tbbFlow;
+  }
   TBBFlow GenerateGraph(StateFlow const &stateFlow,
                         bool isSwapArgumentsAllowedInCrossover) {
     using InputNodeRef = std::reference_wrapper<InputNode>;
