@@ -47,6 +47,15 @@ BOOST_AUTO_TEST_CASE(second_test) {
   BOOST_TEST(grades.at(1) == 3);
 }
 
+BOOST_AUTO_TEST_CASE(arg_traits_test) {
+  auto lambda1 = [](std::string const &) { return 0; };
+  using T=ArgumentTraits<decltype(lambda1)>::Type<1>;
+  auto lambda2 = [&](T t) { return lambda1(t); };
+
+  BOOST_TEST(ArgumentTraits<decltype(lambda2)>::isConst<1>);
+  BOOST_TEST(ArgumentTraits<decltype(lambda2)>::isLValueReference<1>);
+}
+
 BOOST_AUTO_TEST_CASE(perm_test) {
   auto perm = std::vector<size_t>{5, 2, 3, 0, 1, 4};
   auto v = std::vector<size_t>(perm.size());
