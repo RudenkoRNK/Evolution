@@ -33,9 +33,8 @@ BOOST_AUTO_TEST_CASE(second_test) {
   auto population = std::vector<int>{1, 1};
   auto grades = std::vector<double>{0, 0};
 
-  auto env =
-      Environment(std::move(Evaluate), std::move(Mutate), std::move(Crossover),
-                  std::move(population), std::move(grades), std::move(sf));
+  auto env = Environment(Evaluate, Mutate, Crossover, sf, true,
+                         std::move(population), std::move(grades));
   env.Run();
   env.Run();
   env.Run();
@@ -49,7 +48,7 @@ BOOST_AUTO_TEST_CASE(second_test) {
 
 BOOST_AUTO_TEST_CASE(arg_traits_test) {
   auto lambda1 = [](std::string const &) { return 0; };
-  using T=ArgumentTraits<decltype(lambda1)>::Type<1>;
+  using T = ArgumentTraits<decltype(lambda1)>::Type<1>;
   auto lambda2 = [&](T t) { return lambda1(t); };
 
   BOOST_TEST(ArgumentTraits<decltype(lambda2)>::isConst<1>);
@@ -90,9 +89,8 @@ BOOST_AUTO_TEST_CASE(quadratic_equation) {
   auto population = Env::GeneratePopulation(N, Generator);
   auto grades = Env::EvaluatePopulation(population, Evaluate);
   auto sf = Env::GenerateStateFlow(N);
-  auto env = Environment(std::move(Evaluate), std::move(MutateGen),
-                         std::move(Crossover), std::move(population),
-                         std::move(grades), std::move(sf));
+  auto env = Environment(Evaluate, MutateGen, Crossover, sf, true,
+                         std::move(population), std::move(grades));
 
   for (auto i = size_t{0}; i < 500; ++i)
     env.Run();

@@ -4,33 +4,43 @@
 
 namespace Evolution {
 
-template <class FG> struct GeneratorTraits final {
-  auto constexpr static isGenerator = ArgumentTraits<FG>::nArguments == 0;
+struct GeneratorTraits final {
+  template <class FG>
+  auto constexpr static isGenerator =
+      ArgumentTraits<std::remove_reference_t<FG>>::nArguments == 0;
 
-  using Function =
-      std::conditional_t<isGenerator,
-                         typename ArgumentTraits<FG>::template Type<0>, FG>;
+  template <class FG>
+  using Function = std::conditional_t<
+      isGenerator<FG>,
+      typename ArgumentTraits<std::remove_reference_t<FG>>::template Type<0>,
+      std::remove_reference_t<FG>>;
 
-  using ThreadSpecific = tbb::enumerable_thread_specific<Function>;
+  template <class FG>
+  using ThreadSpecific = tbb::enumerable_thread_specific<Function<FG>>;
 
+  template <class FG>
   using ThreadSpecificOrGlobalFunction =
-      std::conditional_t<isGenerator, ThreadSpecific, Function>;
+      std::conditional_t<isGenerator<FG>, ThreadSpecific<FG>, Function<FG>>;
 
+  template <class FG>
   using ThreadSpecificOrGlobalRefFunction =
-      std::conditional_t<isGenerator, ThreadSpecific, Function &>;
+      std::conditional_t<isGenerator<FG>, ThreadSpecific<FG>,
+                         std::add_lvalue_reference_t<Function<FG>>>;
 
-  static auto GetThreadSpecificOrGlobal(FG &&fg) noexcept(!isGenerator)
-      -> std::conditional_t<isGenerator, ThreadSpecific, FG &&> {
-    if constexpr (!isGenerator)
+  template <class FG>
+  static auto GetThreadSpecificOrGlobal(FG &&fg) noexcept(!isGenerator<FG>)
+      -> std::conditional_t<isGenerator<FG>, ThreadSpecific<FG>, FG &&> {
+    if constexpr (!isGenerator<FG>)
       return std::forward<FG>(fg);
     else
-      return ThreadSpecific(std::forward<FG>(fg));
+      return ThreadSpecific<FG>(std::forward<FG>(fg));
   }
 
-  static Function &
-  GetFunction(ThreadSpecificOrGlobalFunction &ThreadSpecificOrGlobal) noexcept(
-      !isGenerator) {
-    if constexpr (!isGenerator)
+  template <class FG>
+  static auto GetFunction(ThreadSpecificOrGlobalFunction<FG> &
+                              ThreadSpecificOrGlobal) noexcept(!isGenerator<FG>)
+      -> std::add_lvalue_reference_t<Function<FG>> {
+    if constexpr (!isGenerator<FG>)
       return ThreadSpecificOrGlobal;
     else
       return ThreadSpecificOrGlobal.local();

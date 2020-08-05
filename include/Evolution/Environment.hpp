@@ -16,21 +16,21 @@ public:
 
 private:
   using SortPopulationFunctionInst =
-      std::function<void(Population const &, Grades const &)>;
+      std::function<void(Population &, Grades &)>;
   TaskFlowInst taskFlow;
   Population population;
   Grades grades;
   SortPopulationFunctionInst SortPopulationF;
 
 public:
-  Environment(EvaluateFG &&Evaluate, MutateFG &&Mutate, CrossoverFG &&Crossover,
-              Population &&population, Grades &&grades, StateFlow &&stateFlow,
-              bool isSwapArgumentsAllowedInCrossover = false)
-      : taskFlow(std::forward<EvaluateFG>(Evaluate),
-                 std::forward<MutateFG>(Mutate),
-                 std::forward<CrossoverFG>(Crossover), std::move(stateFlow),
+  Environment(EvaluateFG const &Evaluate, MutateFG const &Mutate,
+              CrossoverFG const &Crossover, StateFlow const &stateFlow,
+              bool isSwapArgumentsAllowedInCrossover, Population &&population,
+              Grades &&grades)
+      : taskFlow(Evaluate, Mutate, Crossover, stateFlow,
                  isSwapArgumentsAllowedInCrossover) {
     assert(population.size() == stateFlow.GetNEvaluates());
+    SortPopulation(population, grades);
     this->population = std::move(population);
     this->grades = std::move(grades);
   }
@@ -40,40 +40,24 @@ public:
 
   void Run() {
     taskFlow.Run(population, grades);
-    SortPopulation();
+    SortPopulation(population, grades);
   }
 
-  void SetPopulation(Population &&population, Grades &&grades) noexcept {
+  void SetPopulation(Population &&population, Grades &&grades) {
     assert(population.size() = this->population.size());
     assert(grades.size() = this->population.size());
+    SortPopulation(population, grades);
     this->population = std::move(population);
     this->grades = std::move(grades);
   }
 
-  // To actually sort population the SortPopulation should invoke
-  // PermutePopulation inside itself
   template <class SortPopulationFunction>
   void SetSortPopulationFunction(SortPopulationFunction &&SortPopulation) {
     static_assert(std::is_convertible_v<SortPopulationFunction,
                                         SortPopulationFunctionInst>);
     SortPopulationF = SortPopulationFunctionInst(
         std::forward<SortPopulationFunction>(SortPopulation));
-  }
-
-  void PermutePopulation(std::vector<size_t> &permutation) {
-    // buffer for exception-safety
-    auto buffer = std::vector<size_t>(population.size());
-    Permute(population, permutation, std::identity{}, buffer);
-    Permute(grades, permutation, std::identity{});
-  }
-
-  template <class Indexer, class IndexFunction>
-  void PermutePopulation(std::vector<Indexer> &permutation,
-                         IndexFunction &Index) {
-    // buffer for exception-safety
-    auto buffer = std::vector<size_t>(population.size());
-    Permute(population, permutation, Index, buffer);
-    Permute(grades, permutation, Index, buffer);
+    SortPopulation(population, grades);
   }
 
   void SetStateFlow(StateFlow &&stateFlow,
@@ -81,6 +65,8 @@ public:
     assert(population.size() == stateFlow.GetNEvaluates());
     taskFlow.SetStateFlow(std::move(stateFlow),
                           isSwapArgumentsAllowedInCrossover);
+    population.resize(stateFlow.GetNEvaluates());
+    grades.resize(stateFlow.GetNEvaluates());
   }
 
   static StateFlow GenerateStateFlow(size_t populationSize) {
@@ -166,14 +152,13 @@ public:
   }
 
   static Grades EvaluatePopulation(Population const &population,
-                                   EvaluateFG &Evaluate) {
-    auto &&EvaluateThreadSpecificOrGlobal =
-        GeneratorTraits<EvaluateFG>::GetThreadSpecificOrGlobal(
-            std::forward<EvaluateFG>(Evaluate));
+                                   EvaluateFG const &Evaluate) {
+    auto EvaluateThreadSpecificOrGlobal =
+        GeneratorTraits::GetThreadSpecificOrGlobal(Evaluate);
     auto indices = GetIndices(population.size());
     auto grades = Grades(population.size());
     tbb::parallel_for_each(indices.begin(), indices.end(), [&](size_t index) {
-      auto &&Evaluate = GeneratorTraits<EvaluateFG>::GetFunction(
+      auto &&Evaluate = GeneratorTraits::GetFunction<EvaluateFG>(
           EvaluateThreadSpecificOrGlobal);
       grades.at(index) = Evaluate(population.at(index));
     });
@@ -181,9 +166,12 @@ public:
   }
 
 private:
-  void SortPopulation() {
+  void SortPopulation(Population &population, Grades &grades) {
     if (SortPopulationF) {
+      auto size = population.size();
       SortPopulationF(population, grades);
+      assert(population.size() == size);
+      assert(grades.size() == size);
       return;
     }
     auto permutation = GetIndices(population.size());
@@ -191,7 +179,10 @@ private:
               [&](size_t index0, size_t index1) {
                 return grades.at(index0) > grades.at(index1);
               });
-    PermutePopulation(permutation);
+    // buffer for exception-safety
+    auto buffer = std::vector<size_t>(population.size());
+    Permute(population, permutation, std::identity{}, buffer);
+    Permute(grades, permutation, std::identity{}, buffer);
   }
 };
 

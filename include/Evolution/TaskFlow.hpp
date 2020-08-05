@@ -22,9 +22,9 @@ template <class EvaluateFG, class MutateFG, class CrossoverFG>
 class TaskFlow final {
 
 private:
-  using EvaluateFunction = typename GeneratorTraits<EvaluateFG>::Function;
-  using MutateFunction = typename GeneratorTraits<MutateFG>::Function;
-  using CrossoverFunction = typename GeneratorTraits<CrossoverFG>::Function;
+  using EvaluateFunction = typename GeneratorTraits::Function<EvaluateFG>;
+  using MutateFunction = typename GeneratorTraits::Function<MutateFG>;
+  using CrossoverFunction = typename GeneratorTraits::Function<CrossoverFG>;
 
 public:
   using DNA = std::remove_cvref_t<
@@ -87,11 +87,11 @@ private:
       tbb::flow::function_node<std::tuple<DNAPtr, DNAPtr>, DNAPtr>;
   using CrossoverJoinNode = tbb::flow::join_node<std::tuple<DNAPtr, DNAPtr>>;
   using EvaluateThreadSpecificOrGlobalFunction =
-      typename GeneratorTraits<EvaluateFG>::ThreadSpecificOrGlobalFunction;
+      typename GeneratorTraits::ThreadSpecificOrGlobalFunction<EvaluateFG>;
   using MutateThreadSpecificOrGlobalFunction =
-      typename GeneratorTraits<MutateFG>::ThreadSpecificOrGlobalFunction;
+      typename GeneratorTraits::ThreadSpecificOrGlobalFunction<MutateFG>;
   using CrossoverThreadSpecificOrGlobalFunction =
-      typename GeneratorTraits<CrossoverFG>::ThreadSpecificOrGlobalFunction;
+      typename GeneratorTraits::ThreadSpecificOrGlobalFunction<CrossoverFG>;
 
   struct TBBFlow {
     StateFlow stateFlow;
@@ -110,36 +110,33 @@ public:
   using Population = std::vector<DNA>;
   using Grades = std::vector<double>;
 
-  TaskFlow(EvaluateFG &&Evaluate, MutateFG &&Mutate, CrossoverFG &&Crossover,
-           StateFlow &&stateFlow, bool isSwapArgumentsAllowedInCrossover)
-      : tbbFlow(GenerateTBBFlow(stateFlow, isSwapArgumentsAllowedInCrossover)),
+  TaskFlow(EvaluateFG const &Evaluate, MutateFG const &Mutate,
+           CrossoverFG const &Crossover, StateFlow const &stateFlow,
+           bool isSwapArgumentsAllowedInCrossover)
+      : tbbFlow(GenerateTBBFlow(StateFlow(stateFlow),
+                                isSwapArgumentsAllowedInCrossover)),
         EvaluateThreadSpecificOrGlobal(
-            GeneratorTraits<EvaluateFG>::GetThreadSpecificOrGlobal(
-                std::forward<EvaluateFG>(Evaluate))),
+            GeneratorTraits::GetThreadSpecificOrGlobal(Evaluate)),
         MutateThreadSpecificOrGlobal(
-            GeneratorTraits<MutateFG>::GetThreadSpecificOrGlobal(
-                std::forward<MutateFG>(Mutate))),
+            GeneratorTraits::GetThreadSpecificOrGlobal(Mutate)),
         CrossoverThreadSpecificOrGlobal(
-            GeneratorTraits<CrossoverFG>::GetThreadSpecificOrGlobal(
-                std::forward<CrossoverFG>(Crossover))) {
-    tbbFlow.stateFlow = std::move(stateFlow);
-  }
+            GeneratorTraits::GetThreadSpecificOrGlobal(Crossover)) {}
 
   void Run(Population &population, Grades &grades) {
     RunTaskFlow(population);
     MoveResultsFromBuffer(population, grades);
   }
+
   void SetStateFlow(StateFlow &&stateFlow,
                     bool isSwapArgumentsAllowedInCrossover) {
-    auto tbbFlow_ =
-        GenerateTBBFlow(stateFlow, isSwapArgumentsAllowedInCrossover);
+    auto tbbFlow_ = GenerateTBBFlow(std::move(stateFlow),
+                                    isSwapArgumentsAllowedInCrossover);
     tbbFlow.inputNodes.clear();
     tbbFlow.evaluateNodes.clear();
     tbbFlow.mutateNodes.clear();
     tbbFlow.crossoverJoinNodes.clear();
     tbbFlow.crossoverNodes.clear();
     tbbFlow = std::move(tbbFlow_);
-    tbbFlow.stateFlow = std::move(stateFlow);
   }
 
 private:
@@ -156,14 +153,14 @@ private:
 #endif // !NDEBUG
 
   EvaluateFunction &GetEvaluateFunction() {
-    return GeneratorTraits<EvaluateFG>::GetFunction(
+    return GeneratorTraits::GetFunction<EvaluateFG>(
         EvaluateThreadSpecificOrGlobal);
   }
   MutateFunction &GetMutateFunction() {
-    return GeneratorTraits<MutateFG>::GetFunction(MutateThreadSpecificOrGlobal);
+    return GeneratorTraits::GetFunction<MutateFG>(MutateThreadSpecificOrGlobal);
   }
   CrossoverFunction &GetCrossoverFunction() {
-    return GeneratorTraits<CrossoverFG>::GetFunction(
+    return GeneratorTraits::GetFunction<CrossoverFG>(
         CrossoverThreadSpecificOrGlobal);
   }
 
@@ -376,12 +373,13 @@ private:
     return tbbFlow.crossoverNodes.back();
   }
 
-  TBBFlow GenerateTBBFlow(StateFlow const &stateFlow,
+  TBBFlow GenerateTBBFlow(StateFlow &&stateFlow,
                           bool isSwapArgumentsAllowedInCrossover) {
     assert(stateFlow.Verify());
     auto tbbFlow = GenerateGraph(stateFlow, isSwapArgumentsAllowedInCrossover);
     tbbFlow.nonEvaluateInitialIndices =
         EvaluateNonEvaluateInitialIndices(stateFlow);
+    tbbFlow.stateFlow = std::move(stateFlow);
     return tbbFlow;
   }
   TBBFlow GenerateGraph(StateFlow const &stateFlow,
