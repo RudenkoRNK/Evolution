@@ -159,10 +159,14 @@ public:
 
   // Properties
   bool IsMutate(Operation operation) const {
-    return boost::in_degree(GetTarget(operation), G) == 1;
+    return IsMutate(GetTarget(operation));
   }
+  bool IsMutate(State state) const { return boost::in_degree(state, G) == 1; }
   bool IsCrossover(Operation operation) const {
-    return boost::in_degree(GetTarget(operation), G) == 2;
+    return IsCrossover(GetTarget(operation));
+  }
+  bool IsCrossover(State state) const {
+    return boost::in_degree(state, G) == 2;
   }
   bool IsInitialState(State state) const {
     return GetInitialStates().contains(state);

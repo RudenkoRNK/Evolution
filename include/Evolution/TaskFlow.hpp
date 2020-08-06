@@ -109,7 +109,6 @@ private:
       typename GeneratorTraits::ThreadSpecificOrGlobalFunction<CrossoverFG>;
 
   struct TBBFlow {
-    StateFlow stateFlow;
     // tbb::flow::graph does not have copy or move assignment
     std::unique_ptr<tbb::flow::graph> graphPtr;
     std::vector<size_t> inputIndices;
@@ -133,10 +132,10 @@ public:
            bool isSwapArgumentsAllowedInCrossover = false,
            bool isEvaluateLightweight = false, bool isMutateLightweight = false,
            bool isCrossoverLightweight = false)
-      : tbbFlow(GenerateTBBFlow(StateFlow(stateFlow),
-                                isSwapArgumentsAllowedInCrossover,
+      : tbbFlow(GenerateTBBFlow(stateFlow, isSwapArgumentsAllowedInCrossover,
                                 isEvaluateLightweight, isMutateLightweight,
                                 isCrossoverLightweight)),
+        stateFlow(stateFlow),
         EvaluateThreadSpecificOrGlobal(
             GeneratorTraits::GetThreadSpecificOrGlobal(Evaluate)),
         MutateThreadSpecificOrGlobal(
@@ -155,18 +154,20 @@ public:
                     bool isMutateLightweight = false,
                     bool isCrossoverLightweight = false) {
     auto tbbFlow_ = GenerateTBBFlow(
-        std::move(stateFlow), isSwapArgumentsAllowedInCrossover,
-        isEvaluateLightweight, isMutateLightweight, isCrossoverLightweight);
+        stateFlow, isSwapArgumentsAllowedInCrossover, isEvaluateLightweight,
+        isMutateLightweight, isCrossoverLightweight);
     tbbFlow.inputNodes.clear();
     tbbFlow.evaluateNodes.clear();
     tbbFlow.mutateNodes.clear();
     tbbFlow.crossoverJoinNodes.clear();
     tbbFlow.crossoverNodes.clear();
     tbbFlow = std::move(tbbFlow_);
+    this->stateFlow = std::move(stateFlow);
   }
 
 private:
   TBBFlow tbbFlow;
+  StateFlow stateFlow;
   tbb::concurrent_unordered_map<DNAPtr, double, std::hash<DNAPtr>>
       evaluateBuffer;
   EvaluateThreadSpecificOrGlobalFunction EvaluateThreadSpecificOrGlobal;
@@ -453,7 +454,7 @@ private:
     return tbbFlow.crossoverNodes.back();
   }
 
-  TBBFlow GenerateTBBFlow(StateFlow &&stateFlow,
+  TBBFlow GenerateTBBFlow(StateFlow const &stateFlow,
                           bool isSwapArgumentsAllowedInCrossover,
                           bool isEvaluateLightweight, bool isMutateLightweight,
                           bool isCrossoverLightweight) {
@@ -463,7 +464,6 @@ private:
                                  isCrossoverLightweight);
     tbbFlow.nonEvaluateInitialIndices =
         EvaluateNonEvaluateInitialIndices(stateFlow);
-    tbbFlow.stateFlow = std::move(stateFlow);
     return tbbFlow;
   }
   TBBFlow GenerateGraph(StateFlow const &stateFlow,
@@ -625,7 +625,7 @@ private:
   }
 
   size_t GetPopulationSize() const noexcept {
-    return tbbFlow.stateFlow.GetNEvaluates();
+    return stateFlow.GetNEvaluates();
   }
 
   void RunTaskFlow(Population const &population) {
@@ -641,7 +641,9 @@ private:
       tbbFlow.inputNodes.at(i).try_put(
           &population.at(tbbFlow.inputIndices.at(i)));
     (*tbbFlow.graphPtr).wait_for_all();
-    assert(isComputedSet.size() == tbbFlow.stateFlow.GetNStates());
+    assert(isComputedSet.size() == stateFlow.GetNStates());
+    assert(isEvaluatedSet.size() ==
+           stateFlow.GetNEvaluates() - stateFlow.GetNInitialEvaluates());
   }
 
   void MoveResultsFromBuffer(Population &population, Grades &grades) noexcept {
@@ -705,11 +707,35 @@ private:
 #ifndef NDEBUG
     assert(isEvaluatedSet.count(state) == 0 &&
            "Somehow evaluate happened before compute...");
-    if (isComputedSet.count(state) != 0) {
+    if (isComputedSet.count(state) > 0) {
       std::cout << "Found an attempt to compute same node twice!";
       DumpStateFlow();
       assert(false);
     }
+    if (!stateFlow.IsInitialState(state)) {
+      bool isParentsComputed = true;
+      auto p1 = stateFlow.GetAnyParent(state);
+      isParentsComputed &= isComputedSet.count(p1) > 0;
+      if (stateFlow.IsCrossover(state)) {
+        auto p2 = stateFlow.GetCrossoverPair(p1, state);
+        isParentsComputed &= isComputedSet.count(p2) > 0;
+      }
+      if (!isParentsComputed) {
+        std::cout << "Child is being computed before parent!";
+        DumpStateFlow();
+        assert(false);
+      }
+    }
+    bool isChildrenComputed = false;
+    auto const &[childB, childE] = stateFlow.GetChildStates(state);
+    for (auto it = childB; it != childE; ++it)
+      isChildrenComputed |= isComputedSet.count(*it) > 0;
+    if (isChildrenComputed) {
+      std::cout << "Parent is being computed after children!";
+      DumpStateFlow();
+      assert(false);
+    }
+
     isComputedSet.insert(state);
 #endif // !NDEBUG
   }
@@ -722,13 +748,18 @@ private:
       DumpStateFlow();
       assert(false);
     }
+    if (!stateFlow.IsEvaluate(state)) {
+      std::cout << "Found an attempt to evaluate non-evaluate state!";
+      DumpStateFlow();
+      assert(false);
+    }
     isEvaluatedSet.insert(state);
 #endif // !NDEBUG
   }
   void DumpStateFlow() {
 #ifndef NDEBUG
     auto dump = std::ofstream("dump.dot");
-    tbbFlow.stateFlow.Print(dump, isComputedSet, isEvaluatedSet);
+    stateFlow.Print(dump, isComputedSet, isEvaluatedSet);
     dump.close();
 #endif // !NDEBUG
   }
