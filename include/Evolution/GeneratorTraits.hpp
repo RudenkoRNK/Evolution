@@ -28,7 +28,7 @@ struct GeneratorTraits final {
                          std::add_lvalue_reference_t<Function<FG>>>;
 
   template <class FG>
-  static auto GetThreadSpecificOrGlobal(FG &&fg) noexcept(!isGenerator<FG>)
+  auto static GetThreadSpecificOrGlobal(FG &&fg) noexcept(!isGenerator<FG>)
       -> std::conditional_t<isGenerator<FG>, ThreadSpecific<FG>, FG &&> {
     if constexpr (!isGenerator<FG>)
       return std::forward<FG>(fg);
@@ -37,7 +37,7 @@ struct GeneratorTraits final {
   }
 
   template <class FG>
-  static auto GetFunction(ThreadSpecificOrGlobalFunction<FG> &
+  auto static GetFunction(ThreadSpecificOrGlobalFunction<FG> &
                               ThreadSpecificOrGlobal) noexcept(!isGenerator<FG>)
       -> std::add_lvalue_reference_t<Function<FG>> {
     if constexpr (!isGenerator<FG>)

@@ -148,6 +148,16 @@ public:
     MoveResultsFromBuffer(population, grades);
   }
 
+  Grades EvaluatePopulation(Population const &population) {
+    auto indices = GetIndices(population.size());
+    auto grades = Grades(population.size());
+    tbb::parallel_for_each(indices.begin(), indices.end(), [&](size_t index) {
+      auto &&Evaluate = GetEvaluateFunction();
+      grades.at(index) = Evaluate(population.at(index));
+    });
+    return grades;
+  }
+
   void SetStateFlow(StateFlow &&stateFlow,
                     bool isSwapArgumentsAllowedInCrossover = false,
                     bool isEvaluateLightweight = false,
@@ -164,6 +174,8 @@ public:
     tbbFlow = std::move(tbbFlow_);
     this->stateFlow = std::move(stateFlow);
   }
+
+  StateFlow const &GetStateFlow() noexcept { return stateFlow; }
 
 private:
   TBBFlow tbbFlow;
@@ -613,8 +625,8 @@ private:
     return tbbFlow;
   }
 
-  static std::unordered_set<size_t>
-  EvaluateNonEvaluateInitialIndices(StateFlow const &stateFlow) {
+  std::unordered_set<size_t> static EvaluateNonEvaluateInitialIndices(
+      StateFlow const &stateFlow) {
     auto availableIndices = std::unordered_set<size_t>{};
     for (auto i = size_t{0}; i < stateFlow.GetNEvaluates(); ++i)
       availableIndices.insert(i);

@@ -25,14 +25,10 @@ private:
 public:
   Environment(EvaluateFG const &Evaluate, MutateFG const &Mutate,
               CrossoverFG const &Crossover, StateFlow const &stateFlow,
-              bool isSwapArgumentsAllowedInCrossover, Population &&population,
-              Grades &&grades)
+              bool isSwapArgumentsAllowedInCrossover, Population &&population)
       : taskFlow(Evaluate, Mutate, Crossover, stateFlow,
                  isSwapArgumentsAllowedInCrossover) {
-    assert(population.size() == stateFlow.GetNEvaluates());
-    SortPopulation(population, grades);
-    this->population = std::move(population);
-    this->grades = std::move(grades);
+    SetPopulation(std::move(population));
   }
 
   Population const &GetPopulation() const noexcept { return population; }
@@ -43,12 +39,12 @@ public:
     SortPopulation(population, grades);
   }
 
-  void SetPopulation(Population &&population, Grades &&grades) {
-    assert(population.size() = this->population.size());
-    assert(grades.size() = this->population.size());
-    SortPopulation(population, grades);
+  void SetPopulation(Population &&population) {
+    assert(population.size() == taskFlow.GetStateFlow().GetNEvaluates());
+    auto grades_ = taskFlow.EvaluatePopulation(population);
+    SortPopulation(population, grades_);
     this->population = std::move(population);
-    this->grades = std::move(grades);
+    this->grades = std::move(grades_);
   }
 
   template <class SortPopulationFunction>
@@ -62,14 +58,14 @@ public:
 
   void SetStateFlow(StateFlow &&stateFlow,
                     bool isSwapArgumentsAllowedInCrossover = false) {
-    assert(population.size() == stateFlow.GetNEvaluates());
+    assert(population.size() >= stateFlow.GetNEvaluates());
     taskFlow.SetStateFlow(std::move(stateFlow),
                           isSwapArgumentsAllowedInCrossover);
     population.resize(stateFlow.GetNEvaluates());
     grades.resize(stateFlow.GetNEvaluates());
   }
 
-  static StateFlow GenerateStateFlow(size_t populationSize) {
+  StateFlow static GenerateStateFlow(size_t populationSize) {
     // Save top 10%
     // mutate once top 30%,
     // Crossover top 5% with next-top 5%
@@ -142,27 +138,13 @@ public:
   }
 
   template <class DNAGeneratorFunction>
-  static Population GeneratePopulation(size_t populationSize,
+  Population static GeneratePopulation(size_t populationSize,
                                        DNAGeneratorFunction &DNAGenerator) {
     auto population = Population{};
     population.reserve(populationSize);
     std::generate_n(std::back_inserter(population), populationSize,
                     DNAGenerator);
     return population;
-  }
-
-  static Grades EvaluatePopulation(Population const &population,
-                                   EvaluateFG const &Evaluate) {
-    auto EvaluateThreadSpecificOrGlobal =
-        GeneratorTraits::GetThreadSpecificOrGlobal(Evaluate);
-    auto indices = GetIndices(population.size());
-    auto grades = Grades(population.size());
-    tbb::parallel_for_each(indices.begin(), indices.end(), [&](size_t index) {
-      auto &&Evaluate = GeneratorTraits::GetFunction<EvaluateFG>(
-          EvaluateThreadSpecificOrGlobal);
-      grades.at(index) = Evaluate(population.at(index));
-    });
-    return grades;
   }
 
 private:
