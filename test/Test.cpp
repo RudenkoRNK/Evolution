@@ -54,6 +54,20 @@ BOOST_AUTO_TEST_CASE(arg_traits_test) {
   BOOST_TEST(ArgumentTraits<decltype(lambda2)>::isLValueReference<1>);
 }
 
+BOOST_AUTO_TEST_CASE(arg_traits_test_2) {
+  auto x=0;
+  auto lambda1 = [x](std::string const &) mutable{++x; return 0; };
+  auto const lambda2 = [x](std::string const &) mutable{++x; return 0; };
+
+  auto lambda3 = [&](std::string const &) {++x; return 0; };
+  auto const lambda4 = [&](std::string const &) {++x; return 0; };
+
+  BOOST_TEST(!ArgumentTraits<decltype(lambda1)>::isCallableConst);
+  BOOST_TEST(!ArgumentTraits<decltype(lambda2)>::isCallableConst);
+  BOOST_TEST(ArgumentTraits<decltype(lambda3)>::isCallableConst);
+  BOOST_TEST(ArgumentTraits<decltype(lambda4)>::isCallableConst);
+}
+
 BOOST_AUTO_TEST_CASE(perm_test) {
   auto perm = std::vector<size_t>{5, 2, 3, 0, 1, 4};
   auto v = std::vector<size_t>(perm.size());
