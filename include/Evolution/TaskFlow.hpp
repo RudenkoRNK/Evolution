@@ -26,13 +26,9 @@ private:
   using MutateFunction = typename GeneratorTraits::Function<MutateFG>;
   using CrossoverFunction = typename GeneratorTraits::Function<CrossoverFG>;
 
-  template <typename T, template <typename...> class Tmpl>
-  struct isInstanceOf : std::false_type {};
-  template <template <typename...> class Tmpl, typename... Args>
-  struct isInstanceOf<Tmpl<Args...>, Tmpl> : std::true_type {};
   template <class T>
   auto constexpr static isVariant =
-      isInstanceOf<std::remove_reference_t<T>, std::variant>::value;
+      GeneratorTraits::isInstanceOf<std::remove_reference_t<T>, std::variant>;
 
 public:
   using DNA = std::remove_cvref_t<
@@ -42,6 +38,11 @@ private:
   // DNA should a modifiable self-sufficient type
   static_assert(!std::is_const_v<DNA>);
   static_assert(!std::is_reference_v<DNA>);
+
+  // Functions or generators must be thread-safe
+  static_assert(ArgumentTraits<EvaluateFG>::isCallableConst);
+  static_assert(ArgumentTraits<MutateFG>::isCallableConst);
+  static_assert(ArgumentTraits<CrossoverFG>::isCallableConst);
 
   // Check that arguments and return values of functions are of type DNA
   static_assert(std::is_same_v<DNA, std::remove_cvref_t<typename ArgumentTraits<
@@ -73,10 +74,19 @@ private:
 
   auto constexpr static isMutateInPlace =
       (!ArgumentTraits<MutateFunction>::template isConst<1>);
+  auto constexpr static isMutateMovable =
+      ArgumentTraits<MutateFunction>::template isRValueReference<1> ||
+      ArgumentTraits<MutateFunction>::template isValue<1>;
   auto constexpr static isCrossoverInPlaceFirst =
       !ArgumentTraits<CrossoverFunction>::template isConst<1>;
   auto constexpr static isCrossoverInPlaceSecond =
       !ArgumentTraits<CrossoverFunction>::template isConst<2>;
+  auto constexpr static isCrossoverMovableFirst =
+      ArgumentTraits<CrossoverFunction>::template isRValueReference<1> ||
+      ArgumentTraits<CrossoverFunction>::template isValue<1>;
+  auto constexpr static isCrossoverMovableSecond =
+      ArgumentTraits<CrossoverFunction>::template isRValueReference<2> ||
+      ArgumentTraits<CrossoverFunction>::template isValue<2>;
 
   using State = StateFlow::State;
   using StateSet = StateFlow::StateSet;
@@ -88,7 +98,7 @@ private:
   using DNAPtr = std::shared_ptr<DNA>;
 
   auto constexpr static DefaultPolicyIndex = std::in_place_index<0>;
-  auto constexpr static LightweigthPolicyIndex = std::in_place_index<1>;
+  auto constexpr static LightweightPolicyIndex = std::in_place_index<1>;
   using InputNode = tbb::flow::function_node<DNA const *, DNAPtr>;
   using EvaluateNode = std::variant<
       tbb::flow::function_node<DNAPtr, int>,
@@ -159,13 +169,11 @@ public:
   }
 
   void SetStateFlow(StateFlow &&stateFlow,
-                    bool isSwapArgumentsAllowedInCrossover = false,
-                    bool isEvaluateLightweight = false,
-                    bool isMutateLightweight = false,
-                    bool isCrossoverLightweight = false) {
+                    bool isSwapArgumentsAllowedInCrossover = false) {
     auto tbbFlow_ = GenerateTBBFlow(
-        stateFlow, isSwapArgumentsAllowedInCrossover, isEvaluateLightweight,
-        isMutateLightweight, isCrossoverLightweight);
+        stateFlow, isSwapArgumentsAllowedInCrossover,
+        tbbFlow.isEvaluateLightweight, tbbFlow.isMutateLightweight,
+        tbbFlow.isCrossoverLightweight);
     tbbFlow.inputNodes.clear();
     tbbFlow.evaluateNodes.clear();
     tbbFlow.mutateNodes.clear();
@@ -176,6 +184,28 @@ public:
   }
 
   StateFlow const &GetStateFlow() noexcept { return stateFlow; }
+
+  bool static isEvaluateLightweight(EvaluateFG const &Evaluate,
+                                    DNA const &dna) {
+    return isFunctionLightweight(Evaluate, dna);
+  }
+  bool static isMutateLightweight(MutateFG const &Mutate, DNA const &dna) {
+    if constexpr (!isMutateInPlace)
+      return isFunctionLightweight(Mutate, dna);
+    auto dna_ = DNA(dna);
+    if constexpr (isMutateMovable)
+      return isFunctionLightweight(Mutate, std::move(dna_));
+    return isFunctionLightweight(Mutate, dna_);
+  }
+  bool static isCrossoverLightweight(CrossoverFG const &Crossover,
+                                     DNA const &dna0, DNA const &dna1) {
+    if constexpr (!isCrossoverInPlaceFirst)
+      return isCrossoverLightweight_(Crossover, dna0, dna1);
+    auto dna0_ = DNA(dna0);
+    if constexpr (!isCrossoverMovableFirst)
+      return isCrossoverLightweight_(Crossover, dna0_, dna1);
+    return isCrossoverLightweight_(Crossover, std::move(dna0_), dna1);
+  }
 
 private:
   TBBFlow tbbFlow;
@@ -226,16 +256,13 @@ private:
     RegisterCompute(state);
 
     auto isCopyHelp = isMutateInPlace && isCopy;
-    auto constexpr isMove =
-        ArgumentTraits<MutateFunction>::template isRValueReference<1> ||
-        ArgumentTraits<MutateFunction>::template isValue<1>;
     auto isPtrMove = !isCopy || isCopyHelp;
     if (isCopyHelp)
       iSrc = CopyHelper(*iSrc);
 
     auto &&Mutate = GetMutateFunction();
     auto MutatePtr = [&](DNAPtr iSrc) {
-      if constexpr (isMove) {
+      if constexpr (isMutateMovable) {
         assert(!isCopy || iSrcOrig != iSrc);
         return Mutate(std::move(*iSrc));
       } else {
@@ -281,12 +308,6 @@ private:
     }
     auto isCopyHelp0 = isCrossoverInPlaceFirst && isCopy0;
     auto isCopyHelp1 = isCrossoverInPlaceSecond && isCopy1;
-    auto constexpr isMove0 =
-        ArgumentTraits<CrossoverFunction>::template isRValueReference<1> ||
-        ArgumentTraits<CrossoverFunction>::template isValue<1>;
-    auto constexpr isMove1 =
-        ArgumentTraits<CrossoverFunction>::template isRValueReference<2> ||
-        ArgumentTraits<CrossoverFunction>::template isValue<2>;
     auto isPtrMove0 = !isCopy0 || isCopyHelp0;
     auto isPtrMove1 = !isCopy1 || isCopyHelp1;
 
@@ -297,9 +318,9 @@ private:
 
     auto &&Crossover = GetCrossoverFunction();
     auto CrossoverPtr = [&](DNAPtr iSrc0, DNAPtr iSrc1) {
-      if constexpr (isMove0) {
+      if constexpr (isCrossoverMovableFirst) {
         assert(!isCopy0 || iSrcOrig0 != iSrc0);
-        if constexpr (isMove1) {
+        if constexpr (isCrossoverMovableSecond) {
           assert(!isCopy1 || iSrcOrig1 != iSrc1);
           return Crossover(std::move(*iSrc0), std::move(*iSrc1));
         } else {
@@ -308,7 +329,7 @@ private:
         }
       } else {
         assert(!isCopy0 || !isCrossoverInPlaceFirst);
-        if constexpr (isMove1) {
+        if constexpr (isCrossoverMovableSecond) {
           assert(!isCopy1 || iSrcOrig1 != iSrc1);
           return Crossover(*iSrc0, std::move(*iSrc1));
         } else {
@@ -349,7 +370,7 @@ private:
   template <class Node, class... Args>
   Node MakeNode(bool isLightweight, Args &&... args) {
     if (isLightweight)
-      return Node(LightweigthPolicyIndex, std::forward<Args>(args)...);
+      return Node(LightweightPolicyIndex, std::forward<Args>(args)...);
     else
       return Node(DefaultPolicyIndex, std::forward<Args>(args)...);
   }
@@ -673,6 +694,36 @@ private:
       ++ebIt;
       ++idxIt;
     }
+  }
+
+  template <class DNAFirst>
+  bool static isCrossoverLightweight_(CrossoverFG const &Crossover,
+                                      DNAFirst &&dna0, DNA const &dna1) {
+    if constexpr (!isCrossoverInPlaceSecond)
+      return isFunctionLightweight(Crossover, std::forward<DNAFirst>(dna0),
+                                   dna1);
+    auto dna1_ = DNA(dna1);
+    if constexpr (isCrossoverMovableSecond)
+      return isFunctionLightweight(Crossover, std::forward<DNAFirst>(dna0),
+                                   std::move(dna1_));
+    return isFunctionLightweight(Crossover, std::forward<DNAFirst>(dna0),
+                                 dna1_);
+  }
+
+  template <class FG, class... Args>
+  bool static isFunctionLightweight(FG const &Func, Args &&... args) {
+    auto constexpr static maxLightweightClocks = size_t{2000000};
+    auto &&Func_ =
+        GeneratorTraits::GetFunctionForSingleThread<decltype(Func)>(Func);
+    auto start = std::chrono::steady_clock::now();
+    Func_(std::forward<Args>(args)...);
+    auto end = std::chrono::steady_clock::now();
+    auto freq = 2; // clocks per nanosecond
+    auto time =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(end - start)
+            .count();
+    auto clocks = freq * time;
+    return clocks < maxLightweightClocks;
   }
 
   // Debug functions

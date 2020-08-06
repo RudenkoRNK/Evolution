@@ -23,11 +23,20 @@ private:
   SortPopulationFunctionInst SortPopulationF;
 
 public:
-  Environment(EvaluateFG const &Evaluate, MutateFG const &Mutate,
-              CrossoverFG const &Crossover, StateFlow const &stateFlow,
-              bool isSwapArgumentsAllowedInCrossover, Population &&population)
+  Environment(Population &&population, EvaluateFG const &Evaluate,
+              MutateFG const &Mutate, CrossoverFG const &Crossover,
+              StateFlow const &stateFlow,
+              bool isSwapArgumentsAllowedInCrossover = false,
+              bool isBenchmarkFunctions = false)
       : taskFlow(Evaluate, Mutate, Crossover, stateFlow,
-                 isSwapArgumentsAllowedInCrossover) {
+                 isSwapArgumentsAllowedInCrossover,
+                 isBenchmarkFunctions && TaskFlowInst::isEvaluateLightweight(
+                                             Evaluate, population.at(0)),
+                 isBenchmarkFunctions && TaskFlowInst::isMutateLightweight(
+                                             Mutate, population.at(0)),
+                 isBenchmarkFunctions &&
+                     TaskFlowInst::isCrossoverLightweight(
+                         Crossover, population.at(0), population.at(1))) {
     SetPopulation(std::move(population));
   }
 

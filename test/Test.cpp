@@ -33,7 +33,7 @@ BOOST_AUTO_TEST_CASE(second_test) {
   auto population = std::vector<int>{1, 1};
 
   auto env =
-      Environment(Evaluate, Mutate, Crossover, sf, true, std::move(population));
+      Environment(std::move(population), Evaluate, Mutate, Crossover, sf, true);
   env.Run();
   env.Run();
   env.Run();
@@ -101,8 +101,8 @@ BOOST_AUTO_TEST_CASE(quadratic_equation) {
 
   auto population = Env::GeneratePopulation(N, Generator);
   auto sf = Env::GenerateStateFlow(N);
-  auto env = Environment(Evaluate, MutateGen, Crossover, sf, true,
-                         std::move(population));
+  auto env = Environment(std::move(population), Evaluate, MutateGen, Crossover,
+                         sf, true);
 
   for (auto i = size_t{0}; i < 500; ++i)
     env.Run();

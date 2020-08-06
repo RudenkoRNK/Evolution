@@ -5,6 +5,17 @@
 namespace Evolution {
 
 struct GeneratorTraits final {
+private:
+  template <typename T, template <typename...> class Template>
+  struct isInstanceOf_ : std::false_type {};
+  template <template <typename...> class Template, typename... Args>
+  struct isInstanceOf_<Template<Args...>, Template> : std::true_type {};
+
+public:
+  template <class Instance, template <typename...> class Template>
+  auto constexpr static isInstanceOf =
+      isInstanceOf_<std::remove_reference_t<Instance>, Template>::value;
+
   template <class FG>
   auto constexpr static isGenerator =
       ArgumentTraits<std::remove_reference_t<FG>>::nArguments == 0;
@@ -44,6 +55,15 @@ struct GeneratorTraits final {
       return ThreadSpecificOrGlobal;
     else
       return ThreadSpecificOrGlobal.local();
+  }
+
+  template <class FG>
+  auto static GetFunctionForSingleThread(FG &&fg) noexcept(!isGenerator<FG>)
+      -> std::conditional_t<isGenerator<FG>, Function<FG>, FG &&> {
+    if constexpr (!isGenerator<FG>)
+      return std::forward<FG>(fg);
+    else
+      return fg();
   }
 };
 } // namespace Evolution
