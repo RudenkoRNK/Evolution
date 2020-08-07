@@ -75,6 +75,10 @@ private:
       ArgumentTraits<CrossoverFunction>::template isLValueReference<2> ||
       !ArgumentTraits<CrossoverFunction>::template isConst<2>);
 
+  // Mutate and crossover must not return constant values
+  static_assert(!ArgumentTraits<MutateFunction>::template isConst<0>);
+  static_assert(!ArgumentTraits<CrossoverFunction>::template isConst<0>);
+
   auto constexpr static isMutateInPlace =
       (!ArgumentTraits<MutateFunction>::template isConst<1>);
   auto constexpr static isMutateMovable =
