@@ -205,10 +205,27 @@ public:
         [&](State state) { return IsAllLeavesEval; });
     return leaf;
   }
-  bool Verify() const {
+  std::optional<std::string> IsNotReady() const {
+    // The function defines whether this stateFlow can be used in TaskFlow
     auto nEvaluates = GetNEvaluates();
-    return GetNStates() > 0 && GetInitialStates().size() <= nEvaluates &&
-           GetIndex(GetMaxIndexState()) < nEvaluates && !FindUnevaluatedLeaf();
+    if (GetNStates() == 0)
+      return "Number of states must be nonzero.";
+    if (GetInitialStates().size() > nEvaluates)
+      return "Number of evaluates must be greater or equal than number of "
+             "initial states. Number of evaluates: " +
+             std::to_string(nEvaluates) + ". Number of initial states: " +
+             std::to_string(GetInitialStates().size()) + ".";
+    if (GetIndex(GetMaxIndexState()) > nEvaluates)
+      return "Number of evaluates must be greater or equal than number of "
+             "initial states. Number of evaluates: " +
+             std::to_string(nEvaluates) +
+             ". Maximum index among initial states: " +
+             std::to_string(GetIndex(GetMaxIndexState())) +
+             ". Faulty state: " + std::to_string(GetMaxIndexState()) + ".";
+    if (auto state = FindUnevaluatedLeaf())
+      return "All leaf states must be evaluated. Unevaluated state: " +
+             std::to_string(state.value()) + ".";
+    return {};
   }
   void Print(std::ostream &out) {
     auto VertexWriter = [&](std::ostream &out, State state) {

@@ -142,7 +142,7 @@ public:
     }
 
     assert(sf.GetNEvaluates() == populationSize);
-    assert(sf.Verify());
+    assert(!sf.IsNotReady());
     return sf;
   }
 

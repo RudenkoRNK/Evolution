@@ -494,7 +494,7 @@ private:
                           bool isSwapArgumentsAllowedInCrossover,
                           bool isEvaluateLightweight, bool isMutateLightweight,
                           bool isCrossoverLightweight) {
-    assert(stateFlow.Verify());
+    assert(!stateFlow.IsNotReady());
     auto tbbFlow = GenerateGraph(stateFlow, isSwapArgumentsAllowedInCrossover,
                                  isEvaluateLightweight, isMutateLightweight,
                                  isCrossoverLightweight);

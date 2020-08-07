@@ -14,9 +14,9 @@ using namespace Evolution;
 BOOST_AUTO_TEST_CASE(first_test) {
   auto sf = StateFlow{};
   auto s0 = sf.GetOrAddInitialState(0);
-  BOOST_TEST(!sf.Verify());
+  BOOST_TEST(sf.IsNotReady().has_value());
   sf.SetEvaluate(s0);
-  BOOST_TEST(sf.Verify());
+  BOOST_TEST(!sf.IsNotReady().has_value());
 }
 
 BOOST_AUTO_TEST_CASE(second_test) {
