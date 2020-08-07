@@ -30,14 +30,13 @@ BOOST_AUTO_TEST_CASE(second_test) {
   auto Evaluate = [](int x) { return x * 1.0; };
   auto Mutate = [](int x) { return x + 1; };
   auto Crossover = [](int x, int y) { return x + y; };
-  auto population = std::vector<int>{1, 1};
+  auto generator = []() -> int { return 1; };
 
-  auto env =
-      Environment(std::move(population), Evaluate, Mutate, Crossover, sf, true);
+  auto env = Environment(generator, Evaluate, Mutate, Crossover, sf, true);
   env.Run();
   env.Run();
   env.Run();
-  population = env.GetPopulation();
+  auto population = env.GetPopulation();
   auto grades = env.GetGrades();
   BOOST_TEST(population.at(0) == 5);
   BOOST_TEST(population.at(1) == 3);
@@ -113,10 +112,8 @@ BOOST_AUTO_TEST_CASE(quadratic_equation) {
   using Env =
       Environment<decltype(Evaluate), decltype(MutateGen), decltype(Crossover)>;
 
-  auto population = Env::GeneratePopulation(N, Generator);
   auto sf = Env::GenerateStateFlow(N);
-  auto env = Environment(std::move(population), Evaluate, MutateGen, Crossover,
-                         sf, true);
+  auto env = Environment(Generator, Evaluate, MutateGen, Crossover, sf, true);
 
   for (auto i = size_t{0}; i < 500; ++i)
     env.Run();
@@ -167,11 +164,8 @@ BOOST_AUTO_TEST_CASE(swap_args_test) {
     auto z = DNA(x);
     return y;
   };
-  auto population = std::vector<DNA>{
-      {copyCounter}, {copyCounter}, {copyCounter}, {copyCounter}};
-  copyCounter = 0;
-  auto env =
-      Environment(std::move(population), Evaluate, Mutate, Crossover, sf);
+  auto generator = [&]() -> DNA { return {copyCounter}; };
+  auto env = Environment(generator, Evaluate, Mutate, Crossover, sf);
   BOOST_TEST(copyCounter == 0);
   env.Run();
   auto ctr1 = size_t{copyCounter};

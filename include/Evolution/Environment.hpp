@@ -17,25 +17,31 @@ public:
 private:
   using SortPopulationFunctionInst =
       std::function<void(Population &, Grades &)>;
+  using DNAGeneratorFunctionInst = std::function<DNA()>;
+  DNAGeneratorFunctionInst DNAGenerator;
   TaskFlowInst taskFlow;
   Population population;
   Grades grades;
   SortPopulationFunctionInst SortPopulationF;
 
 public:
-  Environment(Population &&population, EvaluateFG const &Evaluate,
-              MutateFG const &Mutate, CrossoverFG const &Crossover,
-              StateFlow const &stateFlow,
+  template <class DNAGeneratorFunction>
+  Environment(DNAGeneratorFunction const &DNAGenerator,
+              EvaluateFG const &Evaluate, MutateFG const &Mutate,
+              CrossoverFG const &Crossover, StateFlow const &stateFlow,
               bool isBenchmarkFunctions = false)
-      : taskFlow(Evaluate, Mutate, Crossover, stateFlow,
+      : DNAGenerator(DNAGeneratorFunctionInst(DNAGenerator)),
+        taskFlow(Evaluate, Mutate, Crossover, stateFlow,
                  isBenchmarkFunctions && TaskFlowInst::IsEvaluateLightweight(
-                                             Evaluate, population.at(0)),
+                                             Evaluate, this->DNAGenerator()),
                  isBenchmarkFunctions && TaskFlowInst::IsMutateLightweight(
-                                             Mutate, population.at(0)),
-                 isBenchmarkFunctions &&
-                     TaskFlowInst::IsCrossoverLightweight(
-                         Crossover, population.at(0), population.at(1))) {
-    SetPopulation(std::move(population));
+                                             Mutate, this->DNAGenerator()),
+                 isBenchmarkFunctions && TaskFlowInst::IsCrossoverLightweight(
+                                             Crossover, this->DNAGenerator(),
+                                             this->DNAGenerator())) {
+    static_assert(
+        std::is_convertible_v<DNAGeneratorFunction, DNAGeneratorFunctionInst>);
+    ResizePopulation(stateFlow.GetNEvaluates());
   }
 
   Population const &GetPopulation() const noexcept { return population; }
@@ -46,28 +52,27 @@ public:
     SortPopulation(population, grades);
   }
 
+  Grades EvaluatePopulation(Population const &population) {
+    return taskFlow.EvaluatePopulation(population);
+  }
+
   void SetPopulation(Population &&population) {
     assert(population.size() == taskFlow.GetStateFlow().GetNEvaluates());
-    auto grades_ = taskFlow.EvaluatePopulation(population);
-    SortPopulation(population, grades_);
-    this->population = std::move(population);
-    this->grades = std::move(grades_);
+    auto grades = EvaluatePopulation(population);
+    SetPopulation(std::move(population), std::move(grades));
   }
 
   template <class SortPopulationFunction>
-  void SetSortPopulationFunction(SortPopulationFunction &&SortPopulation) {
+  void SetSortPopulationFunction(SortPopulationFunction const &SortPopulation) {
     static_assert(std::is_convertible_v<SortPopulationFunction,
                                         SortPopulationFunctionInst>);
-    SortPopulationF = SortPopulationFunctionInst(
-        std::forward<SortPopulationFunction>(SortPopulation));
+    SortPopulationF = SortPopulationFunctionInst(SortPopulation);
     SortPopulation(population, grades);
   }
 
   void SetStateFlow(StateFlow &&stateFlow) {
-    assert(population.size() >= stateFlow.GetNEvaluates());
     taskFlow.SetStateFlow(std::move(stateFlow));
-    population.resize(stateFlow.GetNEvaluates(), population.at(0));
-    grades.resize(stateFlow.GetNEvaluates());
+    ResizePopulation(stateFlow.GetNEvaluates());
   }
 
   StateFlow static GenerateStateFlow(size_t populationSize) {
@@ -143,17 +148,35 @@ public:
     return sf;
   }
 
-  template <class DNAGeneratorFunction>
-  Population static GeneratePopulation(size_t populationSize,
-                                       DNAGeneratorFunction &DNAGenerator) {
-    auto population = Population{};
-    population.reserve(populationSize);
-    std::generate_n(std::back_inserter(population), populationSize,
-                    DNAGenerator);
-    return population;
+private:
+  void ResizePopulation(size_t newSize) {
+    if (population.size() < newSize) {
+      auto diff = newSize - population.size();
+      auto next = Population{};
+      next.reserve(diff);
+      std::generate_n(std::back_inserter(next), diff, DNAGenerator);
+      auto nextGrades = EvaluatePopulation(next);
+      auto newPop = Population{};
+      auto newGrades = Grades{};
+      newPop.reserve(newSize);
+      newGrades.reserve(newSize);
+      newPop.insert(newPop.end(), population.begin(), population.end());
+      std::move(next.begin(), next.end(), std::back_inserter(newPop));
+      newGrades.insert(newGrades.end(), grades.begin(), grades.end());
+      newGrades.insert(newGrades.end(), nextGrades.begin(), nextGrades.end());
+      SetPopulation(std::move(newPop), std::move(newGrades));
+    } else {
+      population.resize(newSize, DNAGenerator());
+      grades.resize(newSize);
+    }
   }
 
-private:
+  void SetPopulation(Population &&population, Grades &&grades) {
+    SortPopulation(population, grades);
+    this->population = std::move(population);
+    this->grades = std::move(grades);
+  }
+
   void SortPopulation(Population &population, Grades &grades) {
     if (SortPopulationF) {
       auto size = population.size();
