@@ -56,16 +56,13 @@ private:
         LambdaOrMethodArgTypes<Callable_>::isCallableConst;
   };
 
-  template <class Callable_> struct GetCallableType {
-    auto constexpr static Type = std::is_function_v<Callable>
-                                     ? CallableType::Function
-                                     : std::is_class_v<Callable>
-                                           ? CallableType::Lambda
-                                           : CallableType::Method;
-  };
+  auto constexpr static ThisCallableType = std::is_function_v<Callable>
+                                               ? CallableType::Function
+                                               : std::is_class_v<Callable>
+                                                     ? CallableType::Lambda
+                                                     : CallableType::Method;
 
-  using ArgTypes_ =
-      typename ArgTypes<Callable, GetCallableType<Callable>::Type>;
+  using ArgTypes_ = typename ArgTypes<Callable, ThisCallableType>;
   using Types = typename ArgTypes_::Types;
 
 public:

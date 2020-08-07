@@ -40,6 +40,9 @@ private:
   static_assert(!std::is_reference_v<DNA>);
 
   // Functions or generators must be thread-safe
+  // Constance does not guarantee tread-safety nor does
+  // its absence means "thread-danger".
+  // But usually its a reasonable check
   static_assert(ArgumentTraits<EvaluateFG>::isCallableConst);
   static_assert(ArgumentTraits<MutateFG>::isCallableConst);
   static_assert(ArgumentTraits<CrossoverFG>::isCallableConst);
