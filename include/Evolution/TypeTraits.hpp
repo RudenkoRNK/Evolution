@@ -4,6 +4,19 @@
 #include <type_traits>
 
 namespace Evolution {
+class TypeTraits final {
+private:
+  template <typename T, template <typename...> class Template>
+  struct isInstanceOf_ : std::false_type {};
+  template <template <typename...> class Template, typename... Args>
+  struct isInstanceOf_<Template<Args...>, Template> : std::true_type {};
+
+public:
+  template <class Instance, template <typename...> class Template>
+  auto constexpr static isInstanceOf =
+      isInstanceOf_<std::remove_reference_t<Instance>, Template>::value;
+};
+
 template <class Callable> struct ArgumentTraits final {
 private:
   enum class CallableType { Function, Method, Lambda };

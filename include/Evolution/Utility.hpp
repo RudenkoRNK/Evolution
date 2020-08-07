@@ -1,6 +1,6 @@
 #pragma once
 #define NOMINMAX
-#include "Evolution/ArgumentTraits.hpp"
+#include "Evolution/TypeTraits.hpp"
 #include <algorithm>
 #include <cassert>
 #include <chrono>

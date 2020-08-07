@@ -1,8 +1,8 @@
 #pragma once
 #define NOMINMAX
-#include "Evolution/ArgumentTraits.hpp"
 #include "Evolution/GeneratorTraits.hpp"
 #include "Evolution/StateFlow.hpp"
+#include "Evolution/TypeTraits.hpp"
 #include "tbb/concurrent_unordered_map.h"
 #include "tbb/concurrent_unordered_set.h"
 #include "tbb/enumerable_thread_specific.h"
@@ -28,7 +28,7 @@ private:
 
   template <class T>
   auto constexpr static isVariant =
-      GeneratorTraits::isInstanceOf<std::remove_reference_t<T>, std::variant>;
+      TypeTraits::isInstanceOf<std::remove_reference_t<T>, std::variant>;
 
 public:
   using DNA = std::remove_cvref_t<

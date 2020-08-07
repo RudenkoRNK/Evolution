@@ -1,21 +1,10 @@
 #pragma once
-#include "Evolution/ArgumentTraits.hpp"
+#include "Evolution/TypeTraits.hpp"
 #include "tbb/enumerable_thread_specific.h"
 
 namespace Evolution {
 
 struct GeneratorTraits final {
-private:
-  template <typename T, template <typename...> class Template>
-  struct isInstanceOf_ : std::false_type {};
-  template <template <typename...> class Template, typename... Args>
-  struct isInstanceOf_<Template<Args...>, Template> : std::true_type {};
-
-public:
-  template <class Instance, template <typename...> class Template>
-  auto constexpr static isInstanceOf =
-      isInstanceOf_<std::remove_reference_t<Instance>, Template>::value;
-
   template <class FG>
   auto constexpr static isGenerator =
       ArgumentTraits<std::remove_reference_t<FG>>::nArguments == 0;
