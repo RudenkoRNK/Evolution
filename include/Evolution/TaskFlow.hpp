@@ -185,26 +185,26 @@ public:
 
   StateFlow const &GetStateFlow() noexcept { return stateFlow; }
 
-  bool static isEvaluateLightweight(EvaluateFG const &Evaluate,
+  bool static IsEvaluateLightweight(EvaluateFG const &Evaluate,
                                     DNA const &dna) {
-    return isFunctionLightweight(Evaluate, dna);
+    return IsFGLightweight(Evaluate, dna);
   }
-  bool static isMutateLightweight(MutateFG const &Mutate, DNA const &dna) {
+  bool static IsMutateLightweight(MutateFG const &Mutate, DNA const &dna) {
     if constexpr (!isMutateInPlace)
-      return isFunctionLightweight(Mutate, dna);
+      return IsFGLightweight(Mutate, dna);
     auto dna_ = DNA(dna);
     if constexpr (isMutateMovable)
-      return isFunctionLightweight(Mutate, std::move(dna_));
-    return isFunctionLightweight(Mutate, dna_);
+      return IsFGLightweight(Mutate, std::move(dna_));
+    return IsFGLightweight(Mutate, dna_);
   }
-  bool static isCrossoverLightweight(CrossoverFG const &Crossover,
+  bool static IsCrossoverLightweight(CrossoverFG const &Crossover,
                                      DNA const &dna0, DNA const &dna1) {
     if constexpr (!isCrossoverInPlaceFirst)
-      return isCrossoverLightweight_(Crossover, dna0, dna1);
+      return IsCrossoverLightweight_(Crossover, dna0, dna1);
     auto dna0_ = DNA(dna0);
     if constexpr (!isCrossoverMovableFirst)
-      return isCrossoverLightweight_(Crossover, dna0_, dna1);
-    return isCrossoverLightweight_(Crossover, std::move(dna0_), dna1);
+      return IsCrossoverLightweight_(Crossover, dna0_, dna1);
+    return IsCrossoverLightweight_(Crossover, std::move(dna0_), dna1);
   }
 
 private:
@@ -697,32 +697,28 @@ private:
   }
 
   template <class DNAFirst>
-  bool static isCrossoverLightweight_(CrossoverFG const &Crossover,
+  bool static IsCrossoverLightweight_(CrossoverFG const &Crossover,
                                       DNAFirst &&dna0, DNA const &dna1) {
     if constexpr (!isCrossoverInPlaceSecond)
-      return isFunctionLightweight(Crossover, std::forward<DNAFirst>(dna0),
-                                   dna1);
+      return IsFGLightweight(Crossover, std::forward<DNAFirst>(dna0), dna1);
     auto dna1_ = DNA(dna1);
     if constexpr (isCrossoverMovableSecond)
-      return isFunctionLightweight(Crossover, std::forward<DNAFirst>(dna0),
-                                   std::move(dna1_));
-    return isFunctionLightweight(Crossover, std::forward<DNAFirst>(dna0),
-                                 dna1_);
+      return IsFGLightweight(Crossover, std::forward<DNAFirst>(dna0),
+                             std::move(dna1_));
+    return IsFGLightweight(Crossover, std::forward<DNAFirst>(dna0), dna1_);
   }
 
   template <class FG, class... Args>
-  bool static isFunctionLightweight(FG const &Func, Args &&... args) {
+  bool static IsFGLightweight(FG const &Func, Args &&... args) {
     auto constexpr static maxLightweightClocks = size_t{2000000};
     auto &&Func_ =
         GeneratorTraits::GetFunctionForSingleThread<decltype(Func)>(Func);
-    auto start = std::chrono::steady_clock::now();
-    Func_(std::forward<Args>(args)...);
-    auto end = std::chrono::steady_clock::now();
     auto freq = 2; // clocks per nanosecond
-    auto time =
-        std::chrono::duration_cast<std::chrono::nanoseconds>(end - start)
-            .count();
-    auto clocks = freq * time;
+    auto time = BenchmarkFunction(std::forward<decltype(Func_)>(Func_),
+                                  std::forward<Args>(args)...);
+    auto nanosecs =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(time).count();
+    auto clocks = freq * nanosecs;
     return clocks < maxLightweightClocks;
   }
 

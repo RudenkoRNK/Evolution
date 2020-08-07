@@ -1,7 +1,9 @@
 #pragma once
 #define NOMINMAX
+#include "Evolution/ArgumentTraits.hpp"
 #include <algorithm>
 #include <cassert>
+#include <chrono>
 #include <numeric>
 #include <vector>
 
@@ -64,6 +66,15 @@ Permute(std::vector<T> &v, std::vector<Indexer> &perm, IndexFunction &Index,
       std::swap(control.at(i), control.at(control.at(i)));
     }
   }
+}
+
+template <class FG, class... Args>
+inline std::chrono::nanoseconds static BenchmarkFunction(FG &&Func,
+                                                         Args &&... args) {
+  auto start = std::chrono::steady_clock::now();
+  Func(std::forward<Args>(args)...);
+  auto end = std::chrono::steady_clock::now();
+  return end - start;
 }
 
 } // namespace Evolution

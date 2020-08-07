@@ -30,12 +30,12 @@ public:
               bool isBenchmarkFunctions = false)
       : taskFlow(Evaluate, Mutate, Crossover, stateFlow,
                  isSwapArgumentsAllowedInCrossover,
-                 isBenchmarkFunctions && TaskFlowInst::isEvaluateLightweight(
+                 isBenchmarkFunctions && TaskFlowInst::IsEvaluateLightweight(
                                              Evaluate, population.at(0)),
-                 isBenchmarkFunctions && TaskFlowInst::isMutateLightweight(
+                 isBenchmarkFunctions && TaskFlowInst::IsMutateLightweight(
                                              Mutate, population.at(0)),
                  isBenchmarkFunctions &&
-                     TaskFlowInst::isCrossoverLightweight(
+                     TaskFlowInst::IsCrossoverLightweight(
                          Crossover, population.at(0), population.at(1))) {
     SetPopulation(std::move(population));
   }
