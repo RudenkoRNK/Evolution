@@ -56,6 +56,7 @@ private:
   size_t nMutates = 0;
   size_t nCrossovers = 0;
   State maxIndexState;
+  bool isSwapArgumentsAllowedInCrossover = false;
 
   template <bool IsOppositeDirection>
   auto GetChildStatesDir(State state) const {
@@ -102,6 +103,10 @@ public:
     ++nEvaluates;
     if (IsInitialState(state))
       ++nInitialEvaluates;
+  }
+  void SetSwapArgumentsAllowedInCrossover(
+      bool isSwapArgumentsAllowedInCrossover = true) noexcept {
+    this->isSwapArgumentsAllowedInCrossover = isSwapArgumentsAllowedInCrossover;
   }
 
   // State/Operation Access
@@ -181,6 +186,9 @@ public:
     return G[state].isEvaluate;
   }
   bool IsLeaf(State state) const { return GetOutDegree(state) == 0; }
+  bool IsSwapArgumentsAllowedInCrossover() const noexcept {
+    return isSwapArgumentsAllowedInCrossover;
+  }
   size_t GetIndex(State state) const {
     auto index = G[state].index;
     return index;

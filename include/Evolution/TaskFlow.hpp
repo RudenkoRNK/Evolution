@@ -142,12 +142,10 @@ public:
 
   TaskFlow(EvaluateFG const &Evaluate, MutateFG const &Mutate,
            CrossoverFG const &Crossover, StateFlow const &stateFlow,
-           bool isSwapArgumentsAllowedInCrossover = false,
            bool isEvaluateLightweight = false, bool isMutateLightweight = false,
            bool isCrossoverLightweight = false)
-      : tbbFlow(GenerateTBBFlow(stateFlow, isSwapArgumentsAllowedInCrossover,
-                                isEvaluateLightweight, isMutateLightweight,
-                                isCrossoverLightweight)),
+      : tbbFlow(GenerateTBBFlow(stateFlow, isEvaluateLightweight,
+                                isMutateLightweight, isCrossoverLightweight)),
         stateFlow(stateFlow),
         EvaluateThreadSpecificOrGlobal(
             GeneratorTraits::GetThreadSpecificOrGlobal(Evaluate)),
@@ -171,12 +169,10 @@ public:
     return grades;
   }
 
-  void SetStateFlow(StateFlow &&stateFlow,
-                    bool isSwapArgumentsAllowedInCrossover = false) {
-    auto tbbFlow_ = GenerateTBBFlow(
-        stateFlow, isSwapArgumentsAllowedInCrossover,
-        tbbFlow.isEvaluateLightweight, tbbFlow.isMutateLightweight,
-        tbbFlow.isCrossoverLightweight);
+  void SetStateFlow(StateFlow &&stateFlow) {
+    auto tbbFlow_ = GenerateTBBFlow(stateFlow, tbbFlow.isEvaluateLightweight,
+                                    tbbFlow.isMutateLightweight,
+                                    tbbFlow.isCrossoverLightweight);
     tbbFlow.inputNodes.clear();
     tbbFlow.evaluateNodes.clear();
     tbbFlow.mutateNodes.clear();
@@ -491,19 +487,16 @@ private:
   }
 
   TBBFlow GenerateTBBFlow(StateFlow const &stateFlow,
-                          bool isSwapArgumentsAllowedInCrossover,
                           bool isEvaluateLightweight, bool isMutateLightweight,
                           bool isCrossoverLightweight) {
     assert(!stateFlow.IsNotReady());
-    auto tbbFlow = GenerateGraph(stateFlow, isSwapArgumentsAllowedInCrossover,
-                                 isEvaluateLightweight, isMutateLightweight,
-                                 isCrossoverLightweight);
+    auto tbbFlow = GenerateGraph(stateFlow, isEvaluateLightweight,
+                                 isMutateLightweight, isCrossoverLightweight);
     tbbFlow.nonEvaluateInitialIndices =
         EvaluateNonEvaluateInitialIndices(stateFlow);
     return tbbFlow;
   }
   TBBFlow GenerateGraph(StateFlow const &stateFlow,
-                        bool isSwapArgumentsAllowedInCrossover,
                         bool isEvaluateLightweight, bool isMutateLightweight,
                         bool isCrossoverLightweight) {
     using InputNodeRef = std::reference_wrapper<InputNode>;
@@ -611,7 +604,7 @@ private:
                   auto &&node = AddCrossover(
                       tbbFlow, parentNodeRef0.get(), parentNodeRef1.get(),
                       IsCopyRequired(op0), IsCopyRequired(op1),
-                      isSwapArgumentsAllowedInCrossover, state);
+                      stateFlow.IsSwapArgumentsAllowedInCrossover(), state);
                   nodes.emplace(state,
                                 NodeRef(CrossoverNodeIndex, std::ref(node)));
                 },

@@ -26,10 +26,8 @@ public:
   Environment(Population &&population, EvaluateFG const &Evaluate,
               MutateFG const &Mutate, CrossoverFG const &Crossover,
               StateFlow const &stateFlow,
-              bool isSwapArgumentsAllowedInCrossover = false,
               bool isBenchmarkFunctions = false)
       : taskFlow(Evaluate, Mutate, Crossover, stateFlow,
-                 isSwapArgumentsAllowedInCrossover,
                  isBenchmarkFunctions && TaskFlowInst::IsEvaluateLightweight(
                                              Evaluate, population.at(0)),
                  isBenchmarkFunctions && TaskFlowInst::IsMutateLightweight(
@@ -65,11 +63,9 @@ public:
     SortPopulation(population, grades);
   }
 
-  void SetStateFlow(StateFlow &&stateFlow,
-                    bool isSwapArgumentsAllowedInCrossover = false) {
+  void SetStateFlow(StateFlow &&stateFlow) {
     assert(population.size() >= stateFlow.GetNEvaluates());
-    taskFlow.SetStateFlow(std::move(stateFlow),
-                          isSwapArgumentsAllowedInCrossover);
+    taskFlow.SetStateFlow(std::move(stateFlow));
     population.resize(stateFlow.GetNEvaluates());
     grades.resize(stateFlow.GetNEvaluates());
   }
@@ -140,6 +136,7 @@ public:
       sf.SetEvaluate(sf.AddCrossover(sf.GetOrAddInitialState(i),
                                      sf.GetOrAddInitialState(j)));
     }
+    sf.SetSwapArgumentsAllowedInCrossover();
 
     assert(sf.GetNEvaluates() == populationSize);
     assert(!sf.IsNotReady());
