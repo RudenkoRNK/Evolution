@@ -190,70 +190,6 @@ public:
     return maxIndexState;
   }
 
-  // Debug & Verification
-  std::optional<State> FindUnevaluatedLeaf() const {
-    auto leaf = std::optional<State>{};
-    auto IsAllLeavesEval = true;
-    BreadthFirstSearch(
-        GetInitialStates(),
-        [&](State state) {
-          if (IsLeaf(state) && !IsEvaluate(state)) {
-            IsAllLeavesEval = false;
-            leaf = state;
-          }
-        },
-        [&](State state) { return IsAllLeavesEval; });
-    return leaf;
-  }
-  std::optional<std::string> IsNotReady() const {
-    // The function defines whether this stateFlow can be used in TaskFlow
-    auto nEvaluates = GetNEvaluates();
-    if (GetNStates() == 0)
-      return "Number of states must be nonzero.";
-    if (GetInitialStates().size() > nEvaluates)
-      return "Number of evaluates must be greater or equal than number of "
-             "initial states. Number of evaluates: " +
-             std::to_string(nEvaluates) + ". Number of initial states: " +
-             std::to_string(GetInitialStates().size()) + ".";
-    if (GetIndex(GetMaxIndexState()) > nEvaluates)
-      return "Number of evaluates must be greater or equal than number of "
-             "initial states. Number of evaluates: " +
-             std::to_string(nEvaluates) +
-             ". Maximum index among initial states: " +
-             std::to_string(GetIndex(GetMaxIndexState())) +
-             ". Faulty state: " + std::to_string(GetMaxIndexState()) + ".";
-    if (auto state = FindUnevaluatedLeaf())
-      return "All leaf states must be evaluated. Unevaluated state: " +
-             std::to_string(state.value()) + ".";
-    return {};
-  }
-  void Print(std::ostream &out) {
-    auto VertexWriter = [&](std::ostream &out, State state) {
-      auto index =
-          IsIndexSet(state) ? " (" + std::to_string(GetIndex(state)) + ")" : "";
-      auto shape = IsEvaluate(state) ? "diamond" : "circle";
-      out << "[label=\"" << state << index << "\", ";
-      out << "shape=" << shape << "]";
-    };
-    boost::write_graphviz(out, G, VertexWriter);
-  }
-  template <class IsComputedSet, class IsEvaluatedSet>
-  void Print(std::ostream &out, IsComputedSet const &isComputedSet,
-             IsEvaluatedSet const &isEvaluatedSet) {
-    auto VertexWriter = [&](std::ostream &out, State state) {
-      auto index =
-          IsIndexSet(state) ? " (" + std::to_string(GetIndex(state)) + ")" : "";
-      auto shape = IsEvaluate(state) ? "diamond" : "circle";
-      auto color = isEvaluatedSet.count(state) != 0
-                       ? "green"
-                       : isComputedSet.count(state) != 0 ? "yellow" : "black";
-      out << "[label=\"" << state << index << "\", ";
-      out << "shape=" << shape << ", ";
-      out << "color=" << color << "]";
-    };
-    boost::write_graphviz(out, G, VertexWriter);
-  }
-
   // Tools
   template <bool IsOppositeDirection = false, class ActFunction,
             class IsAddChildFunction>
@@ -325,6 +261,70 @@ public:
     BreadthFirstSearch<IsOppositeDirection>(startStates,
                                             std::forward<ActFunction>(Act),
                                             [](State child) { return true; });
+  }
+
+  // Debug & Verification
+  std::optional<State> FindUnevaluatedLeaf() const {
+    auto leaf = std::optional<State>{};
+    auto IsAllLeavesEval = true;
+    BreadthFirstSearch(
+        GetInitialStates(),
+        [&](State state) {
+          if (IsLeaf(state) && !IsEvaluate(state)) {
+            IsAllLeavesEval = false;
+            leaf = state;
+          }
+        },
+        [&](State state) { return IsAllLeavesEval; });
+    return leaf;
+  }
+  std::optional<std::string> IsNotReady() const {
+    // The function defines whether this stateFlow can be used in TaskFlow
+    auto nEvaluates = GetNEvaluates();
+    if (GetNStates() == 0)
+      return "Number of states must be nonzero.";
+    if (GetInitialStates().size() > nEvaluates)
+      return "Number of evaluates must be greater or equal than number of "
+             "initial states. Number of evaluates: " +
+             std::to_string(nEvaluates) + ". Number of initial states: " +
+             std::to_string(GetInitialStates().size()) + ".";
+    if (GetIndex(GetMaxIndexState()) > nEvaluates)
+      return "Number of evaluates must be greater or equal than number of "
+             "initial states. Number of evaluates: " +
+             std::to_string(nEvaluates) +
+             ". Maximum index among initial states: " +
+             std::to_string(GetIndex(GetMaxIndexState())) +
+             ". Faulty state: " + std::to_string(GetMaxIndexState()) + ".";
+    if (auto state = FindUnevaluatedLeaf())
+      return "All leaf states must be evaluated. Unevaluated state: " +
+             std::to_string(state.value()) + ".";
+    return {};
+  }
+  void Print(std::ostream &out) {
+    auto VertexWriter = [&](std::ostream &out, State state) {
+      auto index =
+          IsIndexSet(state) ? " (" + std::to_string(GetIndex(state)) + ")" : "";
+      auto shape = IsEvaluate(state) ? "diamond" : "circle";
+      out << "[label=\"" << state << index << "\", ";
+      out << "shape=" << shape << "]";
+    };
+    boost::write_graphviz(out, G, VertexWriter);
+  }
+  template <class IsComputedSet, class IsEvaluatedSet>
+  void Print(std::ostream &out, IsComputedSet const &isComputedSet,
+             IsEvaluatedSet const &isEvaluatedSet) {
+    auto VertexWriter = [&](std::ostream &out, State state) {
+      auto index =
+          IsIndexSet(state) ? " (" + std::to_string(GetIndex(state)) + ")" : "";
+      auto shape = IsEvaluate(state) ? "diamond" : "circle";
+      auto color = isEvaluatedSet.count(state) != 0
+                       ? "green"
+                       : isComputedSet.count(state) != 0 ? "yellow" : "black";
+      out << "[label=\"" << state << index << "\", ";
+      out << "shape=" << shape << ", ";
+      out << "color=" << color << "]";
+    };
+    boost::write_graphviz(out, G, VertexWriter);
   }
 };
 
