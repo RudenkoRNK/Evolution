@@ -50,17 +50,31 @@ BOOST_AUTO_TEST_CASE(arg_traits_test) {
   using T = ArgumentTraits<decltype(lambda1)>::Type<1>;
   auto lambda2 = [&](T t) { return lambda1(t); };
 
+  BOOST_TEST(ArgumentTraits<decltype(lambda1)>::isConst<1>);
+  BOOST_TEST(ArgumentTraits<decltype(lambda1)>::isLValueReference<1>);
   BOOST_TEST(ArgumentTraits<decltype(lambda2)>::isConst<1>);
   BOOST_TEST(ArgumentTraits<decltype(lambda2)>::isLValueReference<1>);
 }
 
 BOOST_AUTO_TEST_CASE(arg_traits_test_2) {
-  auto x=0;
-  auto lambda1 = [x](std::string const &) mutable{++x; return 0; };
-  auto const lambda2 = [x](std::string const &) mutable{++x; return 0; };
+  auto x = 0;
+  auto lambda1 = [x](std::string const &) mutable {
+    ++x;
+    return 0;
+  };
+  auto const lambda2 = [x](std::string const &) mutable {
+    ++x;
+    return 0;
+  };
 
-  auto lambda3 = [&](std::string const &) {++x; return 0; };
-  auto const lambda4 = [&](std::string const &) {++x; return 0; };
+  auto lambda3 = [&](std::string const &) {
+    ++x;
+    return 0;
+  };
+  auto const lambda4 = [&](std::string const &) {
+    ++x;
+    return 0;
+  };
 
   BOOST_TEST(!ArgumentTraits<decltype(lambda1)>::isCallableConst);
   BOOST_TEST(!ArgumentTraits<decltype(lambda2)>::isCallableConst);
