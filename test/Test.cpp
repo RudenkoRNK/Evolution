@@ -129,3 +129,57 @@ BOOST_AUTO_TEST_CASE(quadratic_equation) {
 
   BOOST_TEST(std::abs(env.GetPopulation().at(0) - 3) < 0.000001);
 }
+
+BOOST_AUTO_TEST_CASE(swap_args_test) {
+  auto sf = StateFlow{};
+  auto s0 = sf.GetOrAddInitialState(0);
+  auto s1 = sf.GetOrAddInitialState(1);
+  auto s2 = sf.GetOrAddInitialState(2);
+  auto s3 = sf.GetOrAddInitialState(3);
+  auto s4 = sf.AddCrossover(s0, s1);
+  auto s5 = sf.AddCrossover(s3, s2);
+  sf.SetEvaluate(s4);
+  sf.SetEvaluate(s5);
+  sf.SetEvaluate(s1);
+  sf.SetEvaluate(s2);
+
+  auto sf2 = sf;
+  sf2.SetSwapArgumentsAllowedInCrossover();
+
+  auto copyCounter = std::atomic<size_t>{0};
+  struct DNA {
+    std::atomic<size_t> &copyCounter;
+    DNA(std::atomic<size_t> &copyCounter) : copyCounter(copyCounter) {}
+    DNA(DNA const &dna) noexcept : copyCounter(dna.copyCounter) {
+      ++copyCounter;
+    }
+    DNA(DNA &&dna) noexcept : copyCounter(dna.copyCounter) {}
+    DNA &operator=(DNA const &) {
+      ++copyCounter;
+      return *this;
+    }
+    DNA &operator=(DNA &&) noexcept { return *this; }
+  };
+
+  auto Evaluate = [](DNA const &x) { return 1.0; };
+  auto Mutate = [](DNA x) { return x; };
+  auto Crossover = [](DNA const &x, DNA y) {
+    auto z = DNA(x);
+    return y;
+  };
+  auto population = std::vector<DNA>{
+      {copyCounter}, {copyCounter}, {copyCounter}, {copyCounter}};
+  copyCounter = 0;
+  auto env =
+      Environment(std::move(population), Evaluate, Mutate, Crossover, sf);
+  BOOST_TEST(copyCounter == 0);
+  env.Run();
+  auto ctr1 = size_t{copyCounter};
+  BOOST_TEST(ctr1 <= 8);
+  copyCounter = 0;
+  env.SetStateFlow(std::move(sf2));
+  env.Run();
+  auto ctr2 = size_t{copyCounter};
+  BOOST_TEST(ctr2 <= 6);
+  BOOST_TEST(ctr1 > ctr2);
+}
