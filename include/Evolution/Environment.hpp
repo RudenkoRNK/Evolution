@@ -66,7 +66,7 @@ public:
   void SetStateFlow(StateFlow &&stateFlow) {
     assert(population.size() >= stateFlow.GetNEvaluates());
     taskFlow.SetStateFlow(std::move(stateFlow));
-    population.resize(stateFlow.GetNEvaluates());
+    population.resize(stateFlow.GetNEvaluates(), population.at(0));
     grades.resize(stateFlow.GetNEvaluates());
   }
 
