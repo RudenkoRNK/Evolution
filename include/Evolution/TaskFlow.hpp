@@ -220,6 +220,11 @@ private:
   CrossoverThreadSpecificOrGlobalFunction CrossoverThreadSpecificOrGlobal;
 #ifndef NDEBUG
   tbb::concurrent_unordered_map<DNAPtr, size_t, std::hash<DNAPtr>> workBuffer;
+  tbb::concurrent_unordered_map<State, size_t> evaluateInputAddress;
+  tbb::concurrent_unordered_map<State, size_t> mutateInputAddress;
+  tbb::concurrent_unordered_map<State, std::pair<size_t, size_t>>
+      crossoverInputAddress;
+  tbb::concurrent_unordered_map<State, size_t> outputAddress;
   tbb::concurrent_unordered_set<State> isComputedSet;
   tbb::concurrent_unordered_set<State> isEvaluatedSet;
 #endif // !NDEBUG
@@ -242,7 +247,7 @@ private:
     // Actually this functionality should not be used
     assert(!isCopy);
     CheckRace(iSrc);
-    RegisterEvaluate(state);
+    RegisterEvaluate(state, iSrc);
 
     if (isCopy)
       iSrc = CopyHelper(*iSrc);
@@ -256,7 +261,7 @@ private:
       Register(iSrcOrig);
     else
       CheckRace(iSrcOrig);
-    RegisterCompute(state);
+    RegisterCompute(state, iSrc);
 
     auto isCopyHelp = isMutateInPlace && isCopy;
     auto isPtrMove = !isCopy || isCopyHelp;
@@ -274,14 +279,19 @@ private:
       }
     };
 
+    auto ret = DNAPtr{};
     auto &&dst = MutatePtr(iSrc);
     if (!isPtrMove)
-      return MoveHelper(std::move(dst));
-    *iSrc = std::move(dst);
+      ret = MoveHelper(std::move(dst));
+    else {
+      *iSrc = std::move(dst);
+      ret = iSrc;
+    }
 
     if (!isCopy)
       Unregister(iSrcOrig);
-    return iSrc;
+    RegisterOutput(state, ret);
+    return ret;
   }
   DNAPtr CrossoverHelper(std::tuple<DNAPtr, DNAPtr> iSrcs, bool isCopy0,
                          bool isCopy1, bool isSwapArgumentsAllowed,
@@ -298,7 +308,7 @@ private:
       Register(iSrcOrig1);
     else
       CheckRace(iSrcOrig1);
-    RegisterCompute(state);
+    RegisterCompute(state, iSrc0, iSrc1);
 
     auto isSwap = ((isCrossoverInPlaceFirst && !isCrossoverInPlaceSecond &&
                     isCopy0 && !isCopy1) ||
@@ -306,9 +316,11 @@ private:
                     isCopy1 && !isCopy0)) &&
                   isSwapArgumentsAllowed;
     if (isSwap) {
-      iSrc0.swap(iSrc1);
+      std::swap(iSrc0, iSrc1);
+      std::swap(iSrcOrig0, iSrcOrig1);
       std::swap(isCopy0, isCopy1);
     }
+
     auto isCopyHelp0 = isCrossoverInPlaceFirst && isCopy0;
     auto isCopyHelp1 = isCrossoverInPlaceSecond && isCopy1;
     auto isPtrMove0 = !isCopy0 || isCopyHelp0;
@@ -342,32 +354,36 @@ private:
       }
     };
 
+    auto ret = DNAPtr{};
     auto &&dst = CrossoverPtr(iSrc0, iSrc1);
     if (!isPtrMove0 && !isPtrMove1)
-      return MoveHelper(std::move(dst));
-    if (isPtrMove0 && !isPtrMove1) {
+      ret = MoveHelper(std::move(dst));
+    else if (isPtrMove0 && !isPtrMove1) {
       *iSrc0 = std::move(dst);
-      return iSrc0;
-    }
-    if (isPtrMove1 && !isPtrMove0) {
+      ret = iSrc0;
+    } else if (isPtrMove1 && !isPtrMove0) {
       *iSrc1 = std::move(dst);
-      return iSrc1;
+      ret = iSrc1;
+    } else {
+      if constexpr (isCrossoverInPlaceFirst && !isCrossoverInPlaceSecond) {
+        *iSrc0 = std::move(dst);
+        ret = iSrc0;
+      } else if constexpr (isCrossoverInPlaceSecond &&
+                           !isCrossoverInPlaceFirst) {
+        *iSrc1 = std::move(dst);
+        ret = iSrc1;
+      } else {
+        *iSrc0 = std::move(dst);
+        ret = iSrc0;
+      }
     }
-    if constexpr (isCrossoverInPlaceFirst && !isCrossoverInPlaceSecond) {
-      *iSrc0 = std::move(dst);
-      return iSrc0;
-    }
-    if constexpr (isCrossoverInPlaceSecond && !isCrossoverInPlaceFirst) {
-      *iSrc1 = std::move(dst);
-      return iSrc1;
-    }
-    *iSrc0 = std::move(dst);
 
     if (!isCopy0)
       Unregister(iSrcOrig0);
     if (!isCopy1)
       Unregister(iSrcOrig1);
-    return iSrc0;
+    RegisterOutput(state, ret);
+    return ret;
   }
 
   template <class Node, class... Args>
@@ -387,7 +403,7 @@ private:
     tbbFlow.inputNodes.push_back(InputNode(*tbbFlow.graphPtr,
                                            tbb::flow::concurrency::serial,
                                            [&, state](DNA const *dna) {
-                                             RegisterCompute(state);
+                                             RegisterCompute(state, DNAPtr{});
                                              return CopyHelper(*dna);
                                            }));
     assert(tbbFlow.inputIndices.size() == tbbFlow.inputNodes.size());
@@ -500,9 +516,8 @@ private:
         EvaluateNonEvaluateInitialIndices(stateFlow);
     return tbbFlow;
   }
-  TBBFlow GenerateGraph(StateFlow const &stateFlow,
-                        bool isEvaluateLightweight, bool isMutateLightweight,
-                        bool isCrossoverLightweight) {
+  TBBFlow GenerateGraph(StateFlow const &stateFlow, bool isEvaluateLightweight,
+                        bool isMutateLightweight, bool isCrossoverLightweight) {
     using InputNodeRef = std::reference_wrapper<InputNode>;
     using MutateNodeRef = std::reference_wrapper<MutateNode>;
     using CrossoverNodeRef = std::reference_wrapper<CrossoverNode>;
@@ -667,6 +682,10 @@ private:
     workBuffer.clear();
     isComputedSet.clear();
     isEvaluatedSet.clear();
+    evaluateInputAddress.clear();
+    mutateInputAddress.clear();
+    crossoverInputAddress.clear();
+    outputAddress.clear();
 #endif // !NDEBUG
     evaluateBuffer.clear();
 
@@ -762,7 +781,7 @@ private:
     }
 #endif // !NDEBUG
   }
-  void RegisterCompute(State state) {
+  void RegisterCompute(State state, DNAPtr dnaPtr1, DNAPtr dnaPtr2 = DNAPtr{}) {
 #ifndef NDEBUG
     assert(isEvaluatedSet.count(state) == 0 &&
            "Somehow evaluate happened before compute...");
@@ -795,10 +814,23 @@ private:
       assert(false);
     }
 
+    if (dnaPtr1) {
+      assert(!stateFlow.IsInitialState(state));
+      auto addr = size_t(dnaPtr1.get());
+      if (dnaPtr2) {
+        assert(stateFlow.IsCrossover(state));
+        crossoverInputAddress.emplace(state,
+                                      std::pair(addr, size_t(dnaPtr2.get())));
+      } else {
+        assert(stateFlow.IsMutate(state));
+        mutateInputAddress.emplace(state, addr);
+      }
+    }
+
     isComputedSet.insert(state);
 #endif // !NDEBUG
   }
-  void RegisterEvaluate(State state) {
+  void RegisterEvaluate(State state, DNAPtr dnaPtr) {
 #ifndef NDEBUG
     assert(isComputedSet.count(state) != 0 &&
            "Somehow evaluate is happening before compute...");
@@ -812,7 +844,13 @@ private:
       DumpStateFlow();
       assert(false);
     }
+    evaluateInputAddress.emplace(state, size_t(dnaPtr.get()));
     isEvaluatedSet.insert(state);
+#endif // !NDEBUG
+  }
+  void RegisterOutput(State state, DNAPtr dnaPtr) {
+#ifndef NDEBUG
+    outputAddress.emplace(state, size_t(dnaPtr.get()));
 #endif // !NDEBUG
   }
   void DumpStateFlow() {
