@@ -733,8 +733,8 @@ private:
     auto &&Func_ =
         GeneratorTraits::GetFunctionForSingleThread<decltype(Func)>(Func);
     auto freq = 2; // clocks per nanosecond
-    auto time = BenchmarkFunction(std::forward<decltype(Func_)>(Func_),
-                                  std::forward<Args>(args)...);
+    auto time = Benchmark(std::forward<decltype(Func_)>(Func_),
+                          std::forward<Args>(args)...);
     auto nanosecs =
         std::chrono::duration_cast<std::chrono::nanoseconds>(time).count();
     auto clocks = freq * nanosecs;

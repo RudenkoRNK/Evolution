@@ -70,8 +70,8 @@ public:
     SortPopulation(population, grades);
   }
 
-  void SetStateFlow(StateFlow &&stateFlow) {
-    taskFlow.SetStateFlow(std::move(stateFlow));
+  void SetStateFlow(StateFlow const &stateFlow) {
+    taskFlow.SetStateFlow(StateFlow(stateFlow));
     ResizePopulation(stateFlow.GetNEvaluates());
   }
 

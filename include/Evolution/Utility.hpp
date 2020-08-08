@@ -69,8 +69,7 @@ Permute(std::vector<T> &v, std::vector<Indexer> &perm, IndexFunction &Index,
 }
 
 template <class FG, class... Args>
-inline std::chrono::nanoseconds static BenchmarkFunction(FG &&Func,
-                                                         Args &&... args) {
+inline std::chrono::nanoseconds static Benchmark(FG &&Func, Args &&... args) {
   auto start = std::chrono::steady_clock::now();
   Func(std::forward<Args>(args)...);
   auto end = std::chrono::steady_clock::now();
