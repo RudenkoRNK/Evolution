@@ -67,6 +67,20 @@ public:
     grades = std::move(grades_);
   }
 
+  template <class StateFlowGeneratorFunction>
+  void Optimize(StateFlowGeneratorFunction &&StateFlowGenerator) {
+    Optimize(std::forward<StateFlowGeneratorFunction>(StateFlowGenerator),
+             []() {});
+  }
+
+  template <class StateFlowGeneratorFunction, class GenerationActionFunction>
+  void Optimize(StateFlowGeneratorFunction &&StateFlowGenerator,
+                GenerationActionFunction &&GenerationAction) {
+    static_assert(std::is_convertible_v<GenerationActionFunction,
+                                        PopulationActionFunction>);
+    Run(20, std::forward<GenerationActionFunction>(GenerationAction));
+  }
+
   Grades EvaluatePopulation(Population const &population) {
     return taskFlow.EvaluatePopulation(population);
   }
