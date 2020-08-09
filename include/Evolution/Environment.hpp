@@ -58,11 +58,8 @@ public:
       return;
     auto population_ = population;
     auto grades_ = grades;
-    for (auto gen = size_t{0}; gen < n; ++gen) {
-      taskFlow.Run(population_, grades_);
-      SortPopulation(population_, grades_);
-      GenerationAction(population_, grades_);
-    }
+    Run(population_, grades_, n,
+        std::forward<GenerationActionFunction>(GenerationAction));
     population = std::move(population_);
     grades = std::move(grades_);
   }
@@ -179,6 +176,18 @@ public:
   }
 
 private:
+  template <class GenerationActionFunction>
+  void Run(Population &population, Grades &grades, size_t n,
+           GenerationActionFunction &&GenerationAction) {
+    static_assert(std::is_convertible_v<GenerationActionFunction,
+                                        PopulationActionFunction>);
+    for (auto gen = size_t{0}; gen < n; ++gen) {
+      taskFlow.Run(population, grades);
+      SortPopulation(population, grades);
+      GenerationAction(population, grades);
+    }
+  }
+
   void ResizePopulation(size_t newSize) {
     if (population.size() < newSize) {
       auto diff = newSize - population.size();
