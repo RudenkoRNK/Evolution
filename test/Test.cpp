@@ -131,14 +131,10 @@ BOOST_AUTO_TEST_CASE(swap_args_test) {
   auto sf = StateFlow{};
   auto s0 = sf.GetOrAddInitialState(0);
   auto s1 = sf.GetOrAddInitialState(1);
-  auto s2 = sf.GetOrAddInitialState(2);
-  auto s3 = sf.GetOrAddInitialState(3);
   auto s4 = sf.AddCrossover(s0, s1);
-  auto s5 = sf.AddCrossover(s3, s2);
+  auto s6 = sf.AddMutate(s1);
   sf.SetEvaluate(s4);
-  sf.SetEvaluate(s5);
-  sf.SetEvaluate(s1);
-  sf.SetEvaluate(s2);
+  sf.SetEvaluate(s6);
 
   auto sf2 = sf;
   sf2.SetSwapArgumentsAllowedInCrossover();
@@ -169,11 +165,45 @@ BOOST_AUTO_TEST_CASE(swap_args_test) {
   BOOST_TEST(copyCounter == 0);
   env.Run();
   auto ctr1 = size_t{copyCounter};
-  BOOST_TEST(ctr1 <= 8);
+  BOOST_TEST(ctr1 <= 5);
   copyCounter = 0;
   env.SetStateFlow(std::move(sf2));
   env.Run();
   auto ctr2 = size_t{copyCounter};
-  BOOST_TEST(ctr2 <= 6);
+  BOOST_TEST(ctr2 <= 4);
   BOOST_TEST(ctr1 > ctr2);
+}
+
+BOOST_AUTO_TEST_CASE(grades_preserve_test) {
+  // This test asserts that initial evaluated are not reevaluated
+  auto sf = StateFlow{};
+  auto s0 = sf.GetOrAddInitialState(0);
+  auto s1 = sf.GetOrAddInitialState(1);
+  auto s2 = sf.GetOrAddInitialState(2);
+  auto s3 = sf.GetOrAddInitialState(3);
+  auto s4 = sf.AddCrossover(s0, s1);
+  auto s5 = sf.AddCrossover(s3, s2);
+  auto s6 = sf.AddCrossover(s4, s5);
+  auto s7 = sf.AddCrossover(s5, s4);
+  sf.SetEvaluate(s6);
+  sf.SetEvaluate(s7);
+  sf.SetEvaluate(s1);
+  sf.SetEvaluate(s2);
+
+  auto Evaluate = [](int x) {
+    auto gen = std::mt19937(0);
+    auto rand = std::uniform_int_distribution<>();
+    return rand(gen);
+  };
+  auto Mutate = [](int x) { return x + 1; };
+  auto Crossover = [](int x, int y) { return x + y; };
+  auto generator = []() -> int { return 1; };
+  auto env = Environment(generator, Evaluate, Mutate, Crossover, sf);
+  auto grades = env.GetGrades();
+  auto g1 = grades.at(1);
+  auto g2 = grades.at(2);
+  env.Run();
+  grades = env.GetGrades();
+  BOOST_TEST(g1 == grades.at(1));
+  BOOST_TEST(g2 == grades.at(2));
 }

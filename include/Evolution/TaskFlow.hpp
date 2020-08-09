@@ -106,7 +106,7 @@ private:
 
   auto constexpr static DefaultPolicyIndex = std::in_place_index<0>;
   auto constexpr static LightweightPolicyIndex = std::in_place_index<1>;
-  using InputNode = tbb::flow::function_node<DNA const *, DNAPtr>;
+  using InputNode = tbb::flow::function_node<DNA *, DNAPtr>;
   using EvaluateNode = std::variant<
       tbb::flow::function_node<DNAPtr, int>,
       tbb::flow::function_node<DNAPtr, int, tbb::flow::lightweight>>;
@@ -394,18 +394,20 @@ private:
       return Node(DefaultPolicyIndex, std::forward<Args>(args)...);
   }
 
-  InputNode &AddInput(TBBFlow &tbbFlow, size_t index, State state) {
+  InputNode &AddInput(TBBFlow &tbbFlow, size_t index, bool isCopy,
+                      State state) {
     // Should be preallocated to avoid refs invalidation
     assert(tbbFlow.inputNodes.capacity() > tbbFlow.inputNodes.size());
     tbbFlow.inputIndices.push_back(index);
-    // Could be implemented with MoveHelper in some cases, but this approach is
-    // exception-safe for the Population
-    tbbFlow.inputNodes.push_back(InputNode(*tbbFlow.graphPtr,
-                                           tbb::flow::concurrency::serial,
-                                           [&, state](DNA const *dna) {
-                                             RegisterCompute(state, DNAPtr{});
-                                             return CopyHelper(*dna);
-                                           }));
+    tbbFlow.inputNodes.push_back(
+        InputNode(*tbbFlow.graphPtr, tbb::flow::concurrency::serial,
+                  [&, isCopy, state](DNA *dna) {
+                    RegisterCompute(state, DNAPtr{});
+                    if (isCopy)
+                      return CopyHelper(*dna);
+                    else
+                      return MoveHelper(std::move(*dna));
+                  }));
     assert(tbbFlow.inputIndices.size() == tbbFlow.inputNodes.size());
     return tbbFlow.inputNodes.back();
   }
@@ -510,14 +512,6 @@ private:
                           bool isEvaluateLightweight, bool isMutateLightweight,
                           bool isCrossoverLightweight) {
     assert(!stateFlow.IsNotReady());
-    auto tbbFlow = GenerateGraph(stateFlow, isEvaluateLightweight,
-                                 isMutateLightweight, isCrossoverLightweight);
-    tbbFlow.nonEvaluateInitialIndices =
-        EvaluateNonEvaluateInitialIndices(stateFlow);
-    return tbbFlow;
-  }
-  TBBFlow GenerateGraph(StateFlow const &stateFlow, bool isEvaluateLightweight,
-                        bool isMutateLightweight, bool isCrossoverLightweight) {
     using InputNodeRef = std::reference_wrapper<InputNode>;
     using MutateNodeRef = std::reference_wrapper<MutateNode>;
     using CrossoverNodeRef = std::reference_wrapper<CrossoverNode>;
@@ -544,6 +538,7 @@ private:
     tbbFlow.crossoverNodes.reserve(stateFlow.GetNCrossovers());
 
     auto nodes = std::unordered_map<State, NodeRef>{};
+    auto loneInitials = std::unordered_set<State>{};
 
 #ifndef NDEBUG
     auto resolvedEvaluates = std::unordered_set<State>{};
@@ -552,7 +547,9 @@ private:
     auto evaluateCount = size_t{0};
 #endif // !NDEBUG
 
-    auto IsResolved = [&](State state) { return nodes.contains(state); };
+    auto IsResolved = [&](State state) {
+      return nodes.contains(state) || loneInitials.contains(state);
+    };
     auto IsResolvable = [&](State state) {
       if (stateFlow.IsInitialState(state))
         return true;
@@ -564,7 +561,7 @@ private:
     };
     auto IsCopyRequired = [&](Operation operation) {
       auto parent = stateFlow.GetSource(operation);
-      if (stateFlow.IsEvaluate(parent))
+      if (stateFlow.IsEvaluate(parent) && !stateFlow.IsInitialState(parent))
         return true;
       auto const &[oB, oE] = stateFlow.GetOutOperations(parent);
       if (oE - oB == 1)
@@ -576,7 +573,13 @@ private:
     auto ResolveInitial = [&](State state) {
       assert(!IsResolved(state) && IsResolvable(state));
       assert(stateFlow.IsInitialState(state));
-      auto &&node = AddInput(tbbFlow, stateFlow.GetIndex(state), state);
+      if (stateFlow.IsLeaf(state)) {
+        assert(stateFlow.IsEvaluate(state));
+        loneInitials.insert(state);
+        return;
+      }
+      auto isCopy = stateFlow.IsEvaluate(state);
+      auto &&node = AddInput(tbbFlow, stateFlow.GetIndex(state), isCopy, state);
       nodes.emplace(state, NodeRef(InputNodeIndex, std::ref(node)));
     };
     auto ResolveEvaluate = [&](State state) {
@@ -655,8 +658,11 @@ private:
                                    std::move(Act));
       assert(whileGuard++ < maxIterations);
     }
-    assert(nodes.size() == stateFlow.GetNStates());
+    assert(nodes.size() + loneInitials.size() == stateFlow.GetNStates());
     assert(evaluateCount == stateFlow.GetNEvaluates());
+
+    tbbFlow.nonEvaluateInitialIndices =
+        EvaluateNonEvaluateInitialIndices(stateFlow);
 
     return tbbFlow;
   }
@@ -676,7 +682,7 @@ private:
     return stateFlow.GetNEvaluates();
   }
 
-  void RunTaskFlow(Population const &population) {
+  void RunTaskFlow(Population &population) {
     assert(population.size() == GetPopulationSize());
 #ifndef NDEBUG
     workBuffer.clear();
@@ -693,9 +699,16 @@ private:
       tbbFlow.inputNodes.at(i).try_put(
           &population.at(tbbFlow.inputIndices.at(i)));
     (*tbbFlow.graphPtr).wait_for_all();
-    assert(isComputedSet.size() == stateFlow.GetNStates());
+
+#ifndef NDEBUG
+    auto nLoneInitials = size_t{0};
+    for (auto state : stateFlow.GetInitialStates())
+      if (stateFlow.IsLeaf(state))
+        ++nLoneInitials;
+    assert(isComputedSet.size() == stateFlow.GetNStates() - nLoneInitials);
     assert(isEvaluatedSet.size() ==
            stateFlow.GetNEvaluates() - stateFlow.GetNInitialEvaluates());
+#endif // !NDEBUG
   }
 
   void MoveResultsFromBuffer(Population &population, Grades &grades) noexcept {

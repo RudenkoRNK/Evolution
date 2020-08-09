@@ -15,14 +15,13 @@ public:
   using Grades = typename TaskFlowInst::Grades;
 
 private:
-  using SortPopulationFunctionInst =
-      std::function<void(Population &, Grades &)>;
+  using PopulationActionFunction = std::function<void(Population &, Grades &)>;
   using DNAGeneratorFunctionInst = std::function<DNA()>;
   DNAGeneratorFunctionInst DNAGenerator;
   TaskFlowInst taskFlow;
   Population population;
   Grades grades;
-  SortPopulationFunctionInst SortPopulationF;
+  PopulationActionFunction SortPopulation_;
 
 public:
   template <class DNAGeneratorFunction>
@@ -47,9 +46,25 @@ public:
   Population const &GetPopulation() const noexcept { return population; }
   Grades const &GetGrades() const noexcept { return grades; }
 
-  void Run() {
-    taskFlow.Run(population, grades);
-    SortPopulation(population, grades);
+  void Run(size_t n = 1) {
+    Run(n, [](Population &, Grades &) {});
+  }
+
+  template <class GenerationActionFunction>
+  void Run(size_t n, GenerationActionFunction &&GenerationAction) {
+    static_assert(std::is_convertible_v<GenerationActionFunction,
+                                        PopulationActionFunction>);
+    if (n == 0)
+      return;
+    auto population_ = population;
+    auto grades_ = grades;
+    for (auto gen = size_t{0}; gen < n; ++gen) {
+      taskFlow.Run(population_, grades_);
+      SortPopulation(population_, grades_);
+      GenerationAction(population_, grades_);
+    }
+    population = std::move(population_);
+    grades = std::move(grades_);
   }
 
   Grades EvaluatePopulation(Population const &population) {
@@ -65,8 +80,8 @@ public:
   template <class SortPopulationFunction>
   void SetSortPopulationFunction(SortPopulationFunction const &SortPopulation) {
     static_assert(std::is_convertible_v<SortPopulationFunction,
-                                        SortPopulationFunctionInst>);
-    SortPopulationF = SortPopulationFunctionInst(SortPopulation);
+                                        PopulationActionFunction>);
+    this->SortPopulation_ = PopulationActionFunction(SortPopulation);
     SortPopulation(population, grades);
   }
 
@@ -178,9 +193,9 @@ private:
   }
 
   void SortPopulation(Population &population, Grades &grades) {
-    if (SortPopulationF) {
+    if (SortPopulation_) {
       auto size = population.size();
-      SortPopulationF(population, grades);
+      SortPopulation_(population, grades);
       assert(population.size() == size);
       assert(grades.size() == size);
       return;
@@ -192,6 +207,10 @@ private:
               });
     // buffer for exception-safety
     auto buffer = std::vector<size_t>(population.size());
+    static_assert(
+        noexcept(Permute(population, permutation, std::identity{}, buffer)));
+    static_assert(
+        noexcept(Permute(grades, permutation, std::identity{}, buffer)));
     Permute(population, permutation, std::identity{}, buffer);
     Permute(grades, permutation, std::identity{}, buffer);
   }
