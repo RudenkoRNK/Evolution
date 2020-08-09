@@ -78,10 +78,11 @@ public:
   }
 
   template <class SortPopulationFunction>
-  void SetSortPopulationFunction(SortPopulationFunction const &SortPopulation) {
+  void SetSortPopulationFunction(SortPopulationFunction &&SortPopulation) {
     static_assert(std::is_convertible_v<SortPopulationFunction,
                                         PopulationActionFunction>);
-    this->SortPopulation_ = PopulationActionFunction(SortPopulation);
+    this->SortPopulation_ = PopulationActionFunction(
+        std::forward<SortPopulationFunction>(SortPopulation));
     SortPopulation(population, grades);
   }
 
