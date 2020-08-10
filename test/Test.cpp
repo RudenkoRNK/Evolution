@@ -202,7 +202,7 @@ BOOST_AUTO_TEST_CASE(grades_preserve_test) {
   auto grades = env.GetGrades();
   auto g1 = grades.at(1);
   auto g2 = grades.at(2);
-  env.Run();
+  env.Run(10);
   grades = env.GetGrades();
   BOOST_TEST(g1 == grades.at(1));
   BOOST_TEST(g2 == grades.at(2));
