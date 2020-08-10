@@ -22,19 +22,8 @@ inline void Permute(std::vector<T> &v, std::vector<size_t> &perm) {
 
 template <class T, class Indexer, class IndexFunction>
 inline void Permute(std::vector<T> &v, std::vector<Indexer> &perm,
-                    IndexFunction &&Index) {
-  auto buffer = std::vector<size_t>(v.size());
-  Permute(v, perm, Index, buffer);
-}
-
-template <class T, class Indexer, class IndexFunction>
-inline void
-Permute(std::vector<T> &v, std::vector<Indexer> &perm, IndexFunction &Index,
-        std::vector<size_t>
-            &buffer) noexcept(noexcept(Index(std::declval<Indexer>))) {
-  auto &&control = buffer;
+                    IndexFunction &Index) {
 #ifndef NDEBUG
-  assert(buffer.size() == v.size());
   assert(std::unique(perm.begin(), perm.end(),
                      [&](Indexer const &lhs, Indexer const &rhs) {
                        return Index(lhs) == Index(rhs);
@@ -52,6 +41,7 @@ Permute(std::vector<T> &v, std::vector<Indexer> &perm, IndexFunction &Index,
   }
 #endif // !NDEBUG
 
+  auto &&control = std::vector<size_t>(v.size());
   std::iota(control.begin(), control.end(), size_t{0});
   for (auto i = size_t{0}, e = v.size(); i < e; ++i) {
     while (Index(perm.at(i)) != i) {

@@ -41,6 +41,7 @@ public:
     static_assert(
         std::is_convertible_v<DNAGeneratorFunction, DNAGeneratorFunctionInst>);
     ResizePopulation(stateFlow.GetNEvaluates());
+    assert(Verify());
   }
 
   Population const &GetPopulation() const noexcept { return population; }
@@ -56,18 +57,18 @@ public:
                                         PopulationActionFunction>);
     if (n == 0)
       return;
-    auto population_ = population;
-    auto grades_ = grades;
-    Run(population_, grades_, n,
-        std::forward<GenerationActionFunction>(GenerationAction));
-    population = std::move(population_);
-    grades = std::move(grades_);
+    for (auto gen = size_t{0}; gen < n; ++gen) {
+      taskFlow.Run(population, grades);
+      SortPopulation(population, grades);
+      GenerationAction(population, grades);
+      assert(Verify());
+    }
   }
 
   template <class StateFlowGeneratorFunction>
   void Optimize(StateFlowGeneratorFunction &&StateFlowGenerator) {
     Optimize(std::forward<StateFlowGeneratorFunction>(StateFlowGenerator),
-             []() {});
+             [](Population &, Grades &) {});
   }
 
   template <class StateFlowGeneratorFunction, class GenerationActionFunction>
@@ -83,23 +84,23 @@ public:
   }
 
   void SetPopulation(Population &&population) {
-    assert(population.size() == taskFlow.GetStateFlow().GetNEvaluates());
     auto grades = EvaluatePopulation(population);
     SetPopulation(std::move(population), std::move(grades));
   }
 
   template <class SortPopulationFunction>
-  void SetSortPopulationFunction(SortPopulationFunction &&SortPopulation) {
+  void SetSortPopulationFunction(SortPopulationFunction &&SortPopulation_) {
     static_assert(std::is_convertible_v<SortPopulationFunction,
                                         PopulationActionFunction>);
     this->SortPopulation_ = PopulationActionFunction(
-        std::forward<SortPopulationFunction>(SortPopulation));
+        std::forward<SortPopulationFunction>(SortPopulation_));
     SortPopulation(population, grades);
   }
 
-  void SetStateFlow(StateFlow const &stateFlow) {
-    taskFlow.SetStateFlow(StateFlow(stateFlow));
+  void SetStateFlow(StateFlow &&stateFlow) {
+    taskFlow.SetStateFlow(std::move(stateFlow));
     ResizePopulation(stateFlow.GetNEvaluates());
+    assert(Verify());
   }
 
   StateFlow static GenerateStateFlow(size_t populationSize) {
@@ -176,18 +177,6 @@ public:
   }
 
 private:
-  template <class GenerationActionFunction>
-  void Run(Population &population, Grades &grades, size_t n,
-           GenerationActionFunction &&GenerationAction) {
-    static_assert(std::is_convertible_v<GenerationActionFunction,
-                                        PopulationActionFunction>);
-    for (auto gen = size_t{0}; gen < n; ++gen) {
-      taskFlow.Run(population, grades);
-      SortPopulation(population, grades);
-      GenerationAction(population, grades);
-    }
-  }
-
   void ResizePopulation(size_t newSize) {
     if (population.size() < newSize) {
       auto diff = newSize - population.size();
@@ -211,17 +200,16 @@ private:
   }
 
   void SetPopulation(Population &&population, Grades &&grades) {
+    assert(Verify(population, grades));
     SortPopulation(population, grades);
     this->population = std::move(population);
     this->grades = std::move(grades);
   }
 
-  void SortPopulation(Population &population, Grades &grades) {
+  void SortPopulation(Population &population, Grades &grades) const {
     if (SortPopulation_) {
-      auto size = population.size();
       SortPopulation_(population, grades);
-      assert(population.size() == size);
-      assert(grades.size() == size);
+      assert(Verify());
       return;
     }
     auto permutation = GetIndices(population.size());
@@ -229,14 +217,22 @@ private:
               [&](size_t index0, size_t index1) {
                 return grades.at(index0) > grades.at(index1);
               });
-    // buffer for exception-safety
-    auto buffer = std::vector<size_t>(population.size());
-    static_assert(
-        noexcept(Permute(population, permutation, std::identity{}, buffer)));
-    static_assert(
-        noexcept(Permute(grades, permutation, std::identity{}, buffer)));
-    Permute(population, permutation, std::identity{}, buffer);
-    Permute(grades, permutation, std::identity{}, buffer);
+    Permute(population, permutation, std::identity{});
+    Permute(grades, permutation, std::identity{});
+  }
+
+  size_t GetPopulationSize() const noexcept {
+    return taskFlow.GetStateFlow().GetNEvaluates();
+  }
+
+  bool Verify() const noexcept { return Verify(population, grades); }
+
+  bool Verify(Population const &population, Grades const &grades) const
+      noexcept {
+    auto verified = true;
+    verified &= population.size() == GetPopulationSize();
+    verified &= grades.size() == GetPopulationSize();
+    return verified;
   }
 };
 

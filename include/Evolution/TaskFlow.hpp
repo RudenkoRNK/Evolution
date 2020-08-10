@@ -38,6 +38,7 @@ private:
   // DNA should a modifiable self-sufficient type
   static_assert(!std::is_const_v<DNA>);
   static_assert(!std::is_reference_v<DNA>);
+  static_assert(noexcept(DNA(std::declval<DNA>())));
 
   // Functions or generators must be thread-safe
   // Constance does not guarantee tread-safety nor does
@@ -186,7 +187,7 @@ public:
     this->stateFlow = std::move(stateFlow);
   }
 
-  StateFlow const &GetStateFlow() noexcept { return stateFlow; }
+  StateFlow const &GetStateFlow() const noexcept { return stateFlow; }
 
   bool static IsEvaluateLightweight(EvaluateFG const &Evaluate,
                                     DNA const &dna) {
