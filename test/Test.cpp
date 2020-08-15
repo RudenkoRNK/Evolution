@@ -7,6 +7,7 @@
 #include "tbb/enumerable_thread_specific.h"
 #include "tbb/flow_graph.h"
 #include <boost/test/included/unit_test.hpp>
+#include <functional>
 #include <random>
 
 using namespace Evolution;
@@ -102,10 +103,11 @@ BOOST_AUTO_TEST_CASE(quadratic_equation) {
     return [gen, rand](double x) mutable { return x * (rand(gen) * 4 - 2); };
   };
   auto Crossover = [](double x, double y) { return (x + y) / 2; };
-  auto Generator = []() -> double {
+  auto maxRand = 1000000;
+  auto Generator = [&]() -> double {
     auto gen = std::mt19937(0);
     auto rand = std::uniform_real_distribution<>();
-    return (rand(gen) - 0.5) * 1000000 - 10000;
+    return (rand(gen) - 0.5) * maxRand - 10000;
   };
 
   auto N = 100;
@@ -118,13 +120,44 @@ BOOST_AUTO_TEST_CASE(quadratic_equation) {
   for (auto i = size_t{0}; i < 500; ++i)
     env.Run();
 
-  sf = StateFlow{};
+  auto sf2 = StateFlow{};
   for (auto i = size_t{0}; i < N; ++i)
-    sf.SetEvaluate(sf.GetOrAddInitialState(i));
-  env.SetStateFlow(std::move(sf));
+    sf2.SetEvaluate(sf2.GetOrAddInitialState(i));
+  env.SetStateFlow(std::move(sf2));
   env.Run();
 
   BOOST_TEST(std::abs(env.GetPopulation().at(0) - 3) < 0.000001);
+
+  auto env2 = Environment(Generator, Evaluate, MutateGen, Crossover, sf, true);
+  auto absd = 0.00001;
+  auto Optimize = [&]() {
+    auto nGens = size_t{0};
+    env2.Run();
+    auto best = env2.GetGrades();
+    auto diff = absd + 1;
+    while (diff > absd) {
+      env2.Run();
+      auto const &g2 = env2.GetGrades();
+      diff = std::inner_product(best.begin(), best.end(), g2.begin(), 0.0,
+                                std::plus{}, [](auto x1, auto x2) {
+                                  if (x2 < x1)
+                                    return 0.0;
+                                  return x2 - x1;
+                                });
+      for (auto i = size_t{0}; i < g2.size(); ++i)
+        if (g2.at(i) > best.at(i))
+          best.at(i) = g2.at(i);
+      ++nGens;
+    }
+    return nGens;
+  };
+
+  auto gens1 = Optimize();
+  env2.RegeneratePopulation();
+  // Check that giving an answer reduces the number of iterations
+  env2.SetPopulation({3});
+  auto gens2 = Optimize();
+  BOOST_TEST(gens2 < gens1);
 }
 
 BOOST_AUTO_TEST_CASE(swap_args_test) {

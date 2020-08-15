@@ -16,20 +16,20 @@ public:
 
 private:
   using PopulationActionFunction = std::function<void(Population &, Grades &)>;
-  using DNAGeneratorFunctionInst = std::function<DNA()>;
-  DNAGeneratorFunctionInst DNAGenerator;
+  using DNAGeneratorFunction = std::function<DNA()>;
+  DNAGeneratorFunction DNAGenerator;
   TaskFlowInst taskFlow;
   Population population;
   Grades grades;
   PopulationActionFunction SortPopulation_;
 
 public:
-  template <class DNAGeneratorFunction>
-  Environment(DNAGeneratorFunction const &DNAGenerator,
+  template <class DNAGeneratorFunctionT>
+  Environment(DNAGeneratorFunctionT const &DNAGenerator,
               EvaluateFG const &Evaluate, MutateFG const &Mutate,
               CrossoverFG const &Crossover, StateFlow const &stateFlow,
               bool isBenchmarkFunctions = false)
-      : DNAGenerator(DNAGeneratorFunctionInst(DNAGenerator)),
+      : DNAGenerator(DNAGeneratorFunction(DNAGenerator)),
         taskFlow(Evaluate, Mutate, Crossover, stateFlow,
                  isBenchmarkFunctions && TaskFlowInst::IsEvaluateLightweight(
                                              Evaluate, this->DNAGenerator()),
@@ -39,9 +39,8 @@ public:
                                              Crossover, this->DNAGenerator(),
                                              this->DNAGenerator())) {
     static_assert(
-        std::is_convertible_v<DNAGeneratorFunction, DNAGeneratorFunctionInst>);
+        std::is_convertible_v<DNAGeneratorFunctionT, DNAGeneratorFunction>);
     ResizePopulation(stateFlow.GetNEvaluates());
-    assert(Verify());
   }
 
   Population const &GetPopulation() const noexcept { return population; }
@@ -51,41 +50,33 @@ public:
     Run(n, [](Population &, Grades &) {});
   }
 
-  template <class GenerationActionFunction>
-  void Run(size_t n, GenerationActionFunction &&GenerationAction) {
-    static_assert(std::is_convertible_v<GenerationActionFunction,
+  template <class GenerationActionFunctionT>
+  void Run(size_t n, GenerationActionFunctionT &GenerationAction) {
+    static_assert(std::is_convertible_v<GenerationActionFunctionT,
                                         PopulationActionFunction>);
-    if (n == 0)
-      return;
     for (auto gen = size_t{0}; gen < n; ++gen) {
       taskFlow.Run(population, grades);
       SortPopulation(population, grades);
       GenerationAction(population, grades);
-      assert(Verify());
+      assert(Verify(population, grades));
     }
-  }
-
-  template <class StateFlowGeneratorFunction>
-  void Optimize(StateFlowGeneratorFunction &&StateFlowGenerator) {
-    Optimize(std::forward<StateFlowGeneratorFunction>(StateFlowGenerator),
-             [](Population &, Grades &) {});
-  }
-
-  template <class StateFlowGeneratorFunction, class GenerationActionFunction>
-  void Optimize(StateFlowGeneratorFunction &&StateFlowGenerator,
-                GenerationActionFunction &&GenerationAction) {
-    static_assert(std::is_convertible_v<GenerationActionFunction,
-                                        PopulationActionFunction>);
-    Run(20, std::forward<GenerationActionFunction>(GenerationAction));
   }
 
   Grades EvaluatePopulation(Population const &population) {
     return taskFlow.EvaluatePopulation(population);
   }
 
+  // Also can be used to provide DNA examples
   void SetPopulation(Population &&population) {
-    auto grades = EvaluatePopulation(population);
-    SetPopulation(std::move(population), std::move(grades));
+    AppendPopulation(std::move(population), population.size());
+  }
+
+  void RegeneratePopulation() {
+    auto newPop = Population{};
+    newPop.reserve(population.size());
+    std::generate_n(std::back_inserter(newPop), population.size(),
+                    DNAGenerator);
+    SetPopulation(std::move(newPop));
   }
 
   template <class SortPopulationFunction>
@@ -97,10 +88,17 @@ public:
     SortPopulation(population, grades);
   }
 
+  template <class DNAGeneratorFunctionT>
+  void SetDNAGeneratorFunction(DNAGeneratorFunctionT &&DNAGenerator) {
+    static_assert(
+        std::is_convertible_v<DNAGeneratorFunction, DNAGeneratorFunctionT>);
+    this->DNAGenerator =
+        DNAGeneratorFunction(std::forward<DNAGeneratorFunction>(DNAGenerator));
+  }
+
   void SetStateFlow(StateFlow &&stateFlow) {
     taskFlow.SetStateFlow(std::move(stateFlow));
     ResizePopulation(stateFlow.GetNEvaluates());
-    assert(Verify());
   }
 
   StateFlow static GenerateStateFlow(size_t populationSize) {
@@ -183,33 +181,33 @@ private:
       auto next = Population{};
       next.reserve(diff);
       std::generate_n(std::back_inserter(next), diff, DNAGenerator);
-      auto nextGrades = EvaluatePopulation(next);
-      auto newPop = Population{};
-      auto newGrades = Grades{};
-      newPop.reserve(newSize);
-      newGrades.reserve(newSize);
-      newPop.insert(newPop.end(), population.begin(), population.end());
-      std::move(next.begin(), next.end(), std::back_inserter(newPop));
-      newGrades.insert(newGrades.end(), grades.begin(), grades.end());
-      newGrades.insert(newGrades.end(), nextGrades.begin(), nextGrades.end());
-      SetPopulation(std::move(newPop), std::move(newGrades));
+      AppendPopulation(std::move(next));
     } else {
-      population.resize(newSize, DNAGenerator());
       grades.resize(newSize);
+      population.resize(newSize, DNAGenerator());
     }
+    assert(Verify(population, grades));
   }
 
-  void SetPopulation(Population &&population, Grades &&grades) {
-    assert(Verify(population, grades));
+  void AppendPopulation(Population &&pop, size_t backOffset = 0) {
+    auto grd = EvaluatePopulation(pop);
+    assert(population.size() >= backOffset);
+    auto diff = pop.size() > backOffset ? pop.size() - backOffset : 0;
+    auto newSize = population.size() + diff;
+
+    population.reserve(newSize);
+    grades.reserve(newSize);
+    std::move(pop.begin(), pop.end() - diff, population.end() - backOffset);
+    std::move(pop.end() - diff, pop.end(), std::back_inserter(population));
+    std::move(grd.begin(), grd.end() - diff, grades.end() - backOffset);
+    std::move(grd.end() - diff, grd.end(), std::back_inserter(grades));
     SortPopulation(population, grades);
-    this->population = std::move(population);
-    this->grades = std::move(grades);
   }
 
   void SortPopulation(Population &population, Grades &grades) const {
     if (SortPopulation_) {
       SortPopulation_(population, grades);
-      assert(Verify());
+      assert(Verify(population, grades));
       return;
     }
     auto permutation = GetIndices(population.size());
@@ -224,8 +222,6 @@ private:
   size_t GetPopulationSize() const noexcept {
     return taskFlow.GetStateFlow().GetNEvaluates();
   }
-
-  bool Verify() const noexcept { return Verify(population, grades); }
 
   bool Verify(Population const &population, Grades const &grades) const
       noexcept {
