@@ -241,3 +241,18 @@ BOOST_AUTO_TEST_CASE(grades_preserve_test) {
   BOOST_TEST(g1 == grades.at(1));
   BOOST_TEST(g2 == grades.at(2));
 }
+
+BOOST_AUTO_TEST_CASE(utility_test) {
+  auto x = std::vector<size_t>{0, 1, 2, 3, 4};
+  BOOST_TEST(abs(Utility::Mean(x) - 2) < 0.000001);
+  BOOST_TEST(abs(Utility::RMS(x) - sqrt(6)) < 0.000001);
+  BOOST_TEST(abs(Utility::Variance(x) - 2) < 0.000001);
+  auto fit = Utility::LeastSquares(x);
+  BOOST_TEST(abs(fit.b - 1) < 0.000001);
+
+  auto N = 10001;
+  auto v = Utility::GetIndices(N);
+  BOOST_TEST(abs(Utility::Mean(v) - (N - 1) / 2) < 0.000001);
+  BOOST_TEST(abs(Utility::RMS(v) - sqrt((N - 1) * (2 * N - 1) / 6)) < 0.0001);
+  BOOST_TEST(abs(Utility::Variance(v) - (N * N - 1) / 12) < 0.000001);
+}
