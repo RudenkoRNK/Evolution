@@ -22,6 +22,11 @@ template <class EvaluateFG, class MutateFG, class CrossoverFG>
 class TaskFlow final {
 
 private:
+  using TypeTraits = Utility::TypeTraits;
+  using GeneratorTraits = Utility::GeneratorTraits;
+  template <class Callable>
+  using ArgumentTraits = Utility::ArgumentTraits<Callable>;
+
   using EvaluateFunction = typename GeneratorTraits::Function<EvaluateFG>;
   using MutateFunction = typename GeneratorTraits::Function<MutateFG>;
   using CrossoverFunction = typename GeneratorTraits::Function<CrossoverFG>;
@@ -165,7 +170,7 @@ public:
   }
 
   Grades EvaluatePopulation(Population const &population) {
-    auto indices = GetIndices(population.size());
+    auto indices = Utility::GetIndices(population.size());
     auto grades = Grades(population.size());
     tbb::parallel_for_each(indices.begin(), indices.end(), [&](size_t index) {
       auto &&Evaluate = GetEvaluateFunction();
@@ -747,8 +752,8 @@ private:
     auto &&Func_ =
         GeneratorTraits::GetFunctionForSingleThread<decltype(Func)>(Func);
     auto freq = 2; // clocks per nanosecond
-    auto time = Benchmark(std::forward<decltype(Func_)>(Func_),
-                          std::forward<Args>(args)...);
+    auto time = Utility::Benchmark(std::forward<decltype(Func_)>(Func_),
+                                   std::forward<Args>(args)...);
     auto nanosecs =
         std::chrono::duration_cast<std::chrono::nanoseconds>(time).count();
     auto clocks = freq * nanosecs;

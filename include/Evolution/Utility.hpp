@@ -7,7 +7,7 @@
 #include <numeric>
 #include <vector>
 
-namespace Evolution {
+namespace Utility {
 
 inline std::vector<size_t> GetIndices(size_t size) {
   auto indices = std::vector<size_t>(size);
@@ -120,4 +120,4 @@ inline LinearFit LeastSquares(std::vector<Number> const &y) {
   return LeastSquares(x, y);
 }
 
-} // namespace Evolution
+} // namespace Utility

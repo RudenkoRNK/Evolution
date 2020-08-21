@@ -3,7 +3,8 @@
 #include <tuple>
 #include <type_traits>
 
-namespace Evolution {
+namespace Utility {
+
 class TypeTraits final {
 private:
   template <typename T, template <typename...> class Template>
@@ -80,4 +81,4 @@ public:
       std::is_const_v<std::remove_reference_t<Type<n>>>;
   auto constexpr static isCallableConst = ArgTypes_::isCallableConst;
 };
-} // namespace Evolution
+} // namespace Utility

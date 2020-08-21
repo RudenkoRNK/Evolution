@@ -2,7 +2,7 @@
 #include "Evolution/TypeTraits.hpp"
 #include "tbb/enumerable_thread_specific.h"
 
-namespace Evolution {
+namespace Utility {
 
 struct GeneratorTraits final {
   template <class FG>
@@ -55,4 +55,4 @@ struct GeneratorTraits final {
       return fg();
   }
 };
-} // namespace Evolution
+} // namespace Utility

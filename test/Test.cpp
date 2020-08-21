@@ -10,10 +10,8 @@
 #include <functional>
 #include <random>
 
-using namespace Evolution;
-
 BOOST_AUTO_TEST_CASE(first_test) {
-  auto sf = StateFlow{};
+  auto sf = Evolution::StateFlow{};
   auto s0 = sf.GetOrAddInitialState(0);
   BOOST_TEST(sf.IsNotReady().has_value());
   sf.SetEvaluate(s0);
@@ -21,7 +19,7 @@ BOOST_AUTO_TEST_CASE(first_test) {
 }
 
 BOOST_AUTO_TEST_CASE(second_test) {
-  auto sf = StateFlow{};
+  auto sf = Evolution::StateFlow{};
   auto s0 = sf.GetOrAddInitialState(0);
   auto s1 = sf.GetOrAddInitialState(1);
   auto s2 = sf.AddCrossover(s0, s1);
@@ -33,7 +31,8 @@ BOOST_AUTO_TEST_CASE(second_test) {
   auto Crossover = [](int x, int y) { return x + y; };
   auto generator = []() -> int { return 1; };
 
-  auto env = Environment(generator, Evaluate, Mutate, Crossover, sf, true);
+  auto env =
+      Evolution::Environment(generator, Evaluate, Mutate, Crossover, sf, true);
   env.Run();
   env.Run();
   env.Run();
@@ -47,13 +46,13 @@ BOOST_AUTO_TEST_CASE(second_test) {
 
 BOOST_AUTO_TEST_CASE(arg_traits_test) {
   auto lambda1 = [](std::string const &) { return 0; };
-  using T = ArgumentTraits<decltype(lambda1)>::Type<1>;
+  using T = Utility::ArgumentTraits<decltype(lambda1)>::Type<1>;
   auto lambda2 = [&](T t) { return lambda1(t); };
 
-  BOOST_TEST(ArgumentTraits<decltype(lambda1)>::isConst<1>);
-  BOOST_TEST(ArgumentTraits<decltype(lambda1)>::isLValueReference<1>);
-  BOOST_TEST(ArgumentTraits<decltype(lambda2)>::isConst<1>);
-  BOOST_TEST(ArgumentTraits<decltype(lambda2)>::isLValueReference<1>);
+  BOOST_TEST(Utility::ArgumentTraits<decltype(lambda1)>::isConst<1>);
+  BOOST_TEST(Utility::ArgumentTraits<decltype(lambda1)>::isLValueReference<1>);
+  BOOST_TEST(Utility::ArgumentTraits<decltype(lambda2)>::isConst<1>);
+  BOOST_TEST(Utility::ArgumentTraits<decltype(lambda2)>::isLValueReference<1>);
 }
 
 BOOST_AUTO_TEST_CASE(arg_traits_test_2) {
@@ -76,17 +75,17 @@ BOOST_AUTO_TEST_CASE(arg_traits_test_2) {
     return 0;
   };
 
-  BOOST_TEST(!ArgumentTraits<decltype(lambda1)>::isCallableConst);
-  BOOST_TEST(!ArgumentTraits<decltype(lambda2)>::isCallableConst);
-  BOOST_TEST(ArgumentTraits<decltype(lambda3)>::isCallableConst);
-  BOOST_TEST(ArgumentTraits<decltype(lambda4)>::isCallableConst);
+  BOOST_TEST(!Utility::ArgumentTraits<decltype(lambda1)>::isCallableConst);
+  BOOST_TEST(!Utility::ArgumentTraits<decltype(lambda2)>::isCallableConst);
+  BOOST_TEST(Utility::ArgumentTraits<decltype(lambda3)>::isCallableConst);
+  BOOST_TEST(Utility::ArgumentTraits<decltype(lambda4)>::isCallableConst);
 }
 
 BOOST_AUTO_TEST_CASE(perm_test) {
   auto perm = std::vector<size_t>{5, 2, 3, 0, 1, 4};
   auto v = std::vector<size_t>(perm.size());
   std::iota(v.begin(), v.end(), 0);
-  Permute(v, perm);
+  Utility::Permute(v, perm);
   BOOST_TEST(v == perm);
 }
 
@@ -111,16 +110,17 @@ BOOST_AUTO_TEST_CASE(quadratic_equation) {
   };
 
   auto N = 100;
-  using Env =
-      Environment<decltype(Evaluate), decltype(MutateGen), decltype(Crossover)>;
+  using Env = Evolution::Environment<decltype(Evaluate), decltype(MutateGen),
+                                     decltype(Crossover)>;
 
   auto sf = Env::GenerateStateFlow(N);
-  auto env = Environment(Generator, Evaluate, MutateGen, Crossover, sf, true);
+  auto env = Evolution::Environment(Generator, Evaluate, MutateGen, Crossover,
+                                    sf, true);
 
   for (auto i = size_t{0}; i < 500; ++i)
     env.Run();
 
-  auto sf2 = StateFlow{};
+  auto sf2 = Evolution::StateFlow{};
   for (auto i = size_t{0}; i < N; ++i)
     sf2.SetEvaluate(sf2.GetOrAddInitialState(i));
   env.SetStateFlow(std::move(sf2));
@@ -128,7 +128,8 @@ BOOST_AUTO_TEST_CASE(quadratic_equation) {
 
   BOOST_TEST(std::abs(env.GetPopulation().at(0) - 3) < 0.000001);
 
-  auto env2 = Environment(Generator, Evaluate, MutateGen, Crossover, sf, true);
+  auto env2 = Evolution::Environment(Generator, Evaluate, MutateGen, Crossover,
+                                     sf, true);
   auto absd = 0.00001;
   auto Optimize = [&]() {
     auto nGens = size_t{0};
@@ -161,7 +162,7 @@ BOOST_AUTO_TEST_CASE(quadratic_equation) {
 }
 
 BOOST_AUTO_TEST_CASE(swap_args_test) {
-  auto sf = StateFlow{};
+  auto sf = Evolution::StateFlow{};
   auto s0 = sf.GetOrAddInitialState(0);
   auto s1 = sf.GetOrAddInitialState(1);
   auto s4 = sf.AddCrossover(s0, s1);
@@ -194,7 +195,7 @@ BOOST_AUTO_TEST_CASE(swap_args_test) {
     return y;
   };
   auto generator = [&]() -> DNA { return {copyCounter}; };
-  auto env = Environment(generator, Evaluate, Mutate, Crossover, sf);
+  auto env = Evolution::Environment(generator, Evaluate, Mutate, Crossover, sf);
   BOOST_TEST(copyCounter == 0);
   env.Run();
   auto ctr1 = size_t{copyCounter};
@@ -209,7 +210,7 @@ BOOST_AUTO_TEST_CASE(swap_args_test) {
 
 BOOST_AUTO_TEST_CASE(grades_preserve_test) {
   // This test asserts that initial evaluated are not reevaluated
-  auto sf = StateFlow{};
+  auto sf = Evolution::StateFlow{};
   auto s0 = sf.GetOrAddInitialState(0);
   auto s1 = sf.GetOrAddInitialState(1);
   auto s2 = sf.GetOrAddInitialState(2);
@@ -231,7 +232,7 @@ BOOST_AUTO_TEST_CASE(grades_preserve_test) {
   auto Mutate = [](int x) { return x + 1; };
   auto Crossover = [](int x, int y) { return x + y; };
   auto generator = []() -> int { return 1; };
-  auto env = Environment(generator, Evaluate, Mutate, Crossover, sf);
+  auto env = Evolution::Environment(generator, Evaluate, Mutate, Crossover, sf);
   auto grades = env.GetGrades();
   auto g1 = grades.at(1);
   auto g2 = grades.at(2);

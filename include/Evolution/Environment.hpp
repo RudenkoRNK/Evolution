@@ -210,13 +210,13 @@ private:
       assert(Verify(population, grades));
       return;
     }
-    auto permutation = GetIndices(population.size());
+    auto permutation = Utility::GetIndices(population.size());
     std::sort(permutation.begin(), permutation.end(),
               [&](size_t index0, size_t index1) {
                 return grades.at(index0) > grades.at(index1);
               });
-    Permute(population, permutation, std::identity{});
-    Permute(grades, permutation, std::identity{});
+    Utility::Permute(population, permutation, std::identity{});
+    Utility::Permute(grades, permutation, std::identity{});
   }
 
   size_t GetPopulationSize() const noexcept {
