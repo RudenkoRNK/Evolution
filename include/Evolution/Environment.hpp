@@ -15,13 +15,14 @@ public:
   using Grades = typename TaskFlowInst::Grades;
 
 private:
-  using PopulationActionFunction = std::function<void(Population &, Grades &)>;
+  using SortPopulationFunction = std::function<void(Population &, Grades &)>;
+  using GenerationActionFunction = std::function<bool(Population &, Grades &)>;
   using DNAGeneratorFunction = std::function<DNA()>;
   DNAGeneratorFunction DNAGenerator;
   TaskFlowInst taskFlow;
   Population population;
   Grades grades;
-  PopulationActionFunction SortPopulation_;
+  SortPopulationFunction SortPopulation_;
 
 public:
   template <class DNAGeneratorFunctionT>
@@ -47,19 +48,20 @@ public:
   Grades const &GetGrades() const noexcept { return grades; }
 
   void Run(size_t n = 1) {
-    Run(n, [](Population &, Grades &) {});
+    if (n < 1)
+      return;
+    Run([&](Population &, Grades &) { return --n > 0; });
   }
 
   template <class GenerationActionFunctionT>
-  void Run(size_t n, GenerationActionFunctionT &GenerationAction) {
+  void Run(GenerationActionFunctionT &GenerationAction) {
     static_assert(std::is_convertible_v<GenerationActionFunctionT,
-                                        PopulationActionFunction>);
-    for (auto gen = size_t{0}; gen < n; ++gen) {
+                                        GenerationActionFunction>);
+    do {
+      assert(Verify(population, grades));
       taskFlow.Run(population, grades);
       SortPopulation(population, grades);
-      GenerationAction(population, grades);
-      assert(Verify(population, grades));
-    }
+    } while (GenerationAction(population, grades));
   }
 
   Grades EvaluatePopulation(Population const &population) {
@@ -79,12 +81,12 @@ public:
     SetPopulation(std::move(newPop));
   }
 
-  template <class SortPopulationFunction>
-  void SetSortPopulationFunction(SortPopulationFunction &&SortPopulation_) {
-    static_assert(std::is_convertible_v<SortPopulationFunction,
-                                        PopulationActionFunction>);
-    this->SortPopulation_ = PopulationActionFunction(
-        std::forward<SortPopulationFunction>(SortPopulation_));
+  template <class SortPopulationFunctionT>
+  void SetSortPopulationFunction(SortPopulationFunctionT &&SortPopulation_) {
+    static_assert(
+        std::is_convertible_v<SortPopulationFunctionT, SortPopulationFunction>);
+    this->SortPopulation_ = SortPopulationFunction(
+        std::forward<SortPopulationFunctionT>(SortPopulation_));
     SortPopulation(population, grades);
   }
 
