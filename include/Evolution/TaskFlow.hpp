@@ -45,14 +45,6 @@ private:
   static_assert(!std::is_reference_v<DNA>);
   static_assert(noexcept(DNA(std::declval<DNA>())));
 
-  // Functions or generators must be thread-safe
-  // Constance does not guarantee tread-safety nor does
-  // its absence means "thread-danger".
-  // But usually its a reasonable check
-  static_assert(ArgumentTraits<EvaluateFG>::isCallableConst);
-  static_assert(ArgumentTraits<MutateFG>::isCallableConst);
-  static_assert(ArgumentTraits<CrossoverFG>::isCallableConst);
-
   // Check that arguments and return values of functions are of type DNA
   static_assert(std::is_same_v<DNA, std::remove_cvref_t<typename ArgumentTraits<
                                         EvaluateFunction>::template Type<1>>>);
