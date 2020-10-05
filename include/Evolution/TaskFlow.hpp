@@ -422,14 +422,10 @@ private:
         }));
     if constexpr (isVariant<Node>)
       std::visit(
-          [&](auto &predNode) {
-            std::visit(
-                [&](auto &succNode) {
-                  tbb::flow::make_edge(predNode, succNode);
-                },
-                tbbFlow.evaluateNodes.back());
+          [&](auto &predNode, auto &succNode) {
+            tbb::flow::make_edge(predNode, succNode);
           },
-          predecessor);
+          predecessor, tbbFlow.evaluateNodes.back());
     else
       std::visit(
           [&](auto &succNode) { tbb::flow::make_edge(predecessor, succNode); },
@@ -448,14 +444,10 @@ private:
         }));
     if constexpr (isVariant<Node>)
       std::visit(
-          [&](auto &predNode) {
-            std::visit(
-                [&](auto &succNode) {
-                  tbb::flow::make_edge(predNode, succNode);
-                },
-                tbbFlow.mutateNodes.back());
+          [&](auto &predNode, auto &succNode) {
+            tbb::flow::make_edge(predNode, succNode);
           },
-          predecessor);
+          predecessor, tbbFlow.mutateNodes.back());
     else
       std::visit(
           [&](auto &succNode) { tbb::flow::make_edge(predecessor, succNode); },
@@ -618,19 +610,14 @@ private:
       auto &&parentNodeVar0 = nodes.at(parent0);
       auto &&parentNodeVar1 = nodes.at(parent1);
       std::visit(
-          [&](auto parentNodeRef0) {
-            std::visit(
-                [&](auto parentNodeRef1) {
-                  auto &&node = AddCrossover(
-                      tbbFlow, parentNodeRef0.get(), parentNodeRef1.get(),
-                      IsCopyRequired(op0), IsCopyRequired(op1),
-                      stateFlow.IsSwapArgumentsAllowedInCrossover(), state);
-                  nodes.emplace(state,
-                                NodeRef(CrossoverNodeIndex, std::ref(node)));
-                },
-                parentNodeVar1);
+          [&](auto parentNodeRef0, auto parentNodeRef1) {
+            auto &&node = AddCrossover(
+                tbbFlow, parentNodeRef0.get(), parentNodeRef1.get(),
+                IsCopyRequired(op0), IsCopyRequired(op1),
+                stateFlow.IsSwapArgumentsAllowedInCrossover(), state);
+            nodes.emplace(state, NodeRef(CrossoverNodeIndex, std::ref(node)));
           },
-          parentNodeVar0);
+          parentNodeVar0, parentNodeVar1);
     };
 
     bool modified = true;
