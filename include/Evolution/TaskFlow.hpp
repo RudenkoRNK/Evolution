@@ -2,7 +2,7 @@
 #define NOMINMAX
 #include "Evolution/GeneratorTraits.hpp"
 #include "Evolution/StateFlow.hpp"
-#include "Evolution/TypeTraits.hpp"
+#include "Utility/TypeTraits.hpp"
 #include "tbb/concurrent_unordered_map.h"
 #include "tbb/concurrent_unordered_set.h"
 #include "tbb/enumerable_thread_specific.h"

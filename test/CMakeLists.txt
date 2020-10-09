@@ -17,3 +17,4 @@ file(GLOB EvolutionTestSources
 
 target_sources(EvolutionTest PRIVATE ${EvolutionSources})
 target_sources(EvolutionTest PRIVATE ${EvolutionTestSources})
+target_sources(EvolutionTest PRIVATE ${UtilitySources})
