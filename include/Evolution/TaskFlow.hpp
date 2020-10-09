@@ -683,7 +683,7 @@ private:
     for (auto i = size_t{0}; i < tbbFlow.inputNodes.size(); ++i)
       tbbFlow.inputNodes.at(i).try_put(
           &population.at(tbbFlow.inputIndices.at(i)));
-    (*tbbFlow.graphPtr).wait_for_all();
+    tbbFlow.graphPtr->wait_for_all();
 
 #ifndef NDEBUG
     auto nLoneInitials = size_t{0};
