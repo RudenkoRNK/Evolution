@@ -22,7 +22,7 @@ file(GLOB EvolutionSources
   ${CMAKE_CURRENT_SOURCE_DIR}/include/Evolution/*.cpp
 )
 
-option(Evolution_BUILD_TEST "Build Evolution tests" OFF)
-if (Evolution_BUILD_TEST)
+option(EVOLUTION_TEST "Build Evolution tests" OFF)
+if (EVOLUTION_TEST)
   add_subdirectory(test)
 endif ()
