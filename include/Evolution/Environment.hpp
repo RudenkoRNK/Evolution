@@ -16,8 +16,10 @@ public:
   using Grades = typename TaskFlowInst::Grades;
 
 private:
-  using SortPopulationFunction = std::function<void(Population &, Grades &)>;
-  using GenerationActionFunction = std::function<bool(Population &, Grades &)>;
+  using SortPopulationFunction =
+      std::function<std::vector<size_t>(Population const &, Grades const &)>;
+  using GenerationActionFunction =
+      std::function<bool(Population const &, Grades const &)>;
   using DNAGeneratorFunction = std::function<DNA()>;
   DNAGeneratorFunction DNAGenerator;
   TaskFlowInst taskFlow;
@@ -51,7 +53,7 @@ public:
   void Run(size_t n = 1) {
     if (n < 1)
       return;
-    Run([&](Population &, Grades &) { return --n > 0; });
+    Run([&](Population const &, Grades const &) { return --n > 0; });
   }
 
   template <class GenerationActionFunctionT>
@@ -89,14 +91,6 @@ public:
     this->SortPopulation_ = SortPopulationFunction(
         std::forward<SortPopulationFunctionT>(SortPopulation_));
     SortPopulation(population, grades);
-  }
-
-  template <class DNAGeneratorFunctionT>
-  void SetDNAGeneratorFunction(DNAGeneratorFunctionT &&DNAGenerator) {
-    static_assert(
-        std::is_convertible_v<DNAGeneratorFunction, DNAGeneratorFunctionT>);
-    this->DNAGenerator =
-        DNAGeneratorFunction(std::forward<DNAGeneratorFunction>(DNAGenerator));
   }
 
   void SetStateFlow(StateFlow &&stateFlow) {
@@ -208,16 +202,16 @@ private:
   }
 
   void SortPopulation(Population &population, Grades &grades) const {
-    if (SortPopulation_) {
-      SortPopulation_(population, grades);
-      assert(Verify(population, grades));
-      return;
+    auto permutation = std::vector<size_t>{};
+    if (SortPopulation_)
+      permutation = SortPopulation_(population, grades);
+    else {
+      permutation = Utility::GetIndices(population.size());
+      std::sort(permutation.begin(), permutation.end(),
+                [&](size_t index0, size_t index1) {
+                  return grades.at(index0) > grades.at(index1);
+                });
     }
-    auto permutation = Utility::GetIndices(population.size());
-    std::sort(permutation.begin(), permutation.end(),
-              [&](size_t index0, size_t index1) {
-                return grades.at(index0) > grades.at(index1);
-              });
     Utility::Permute(population, permutation, std::identity{});
     Utility::Permute(grades, permutation, std::identity{});
   }
