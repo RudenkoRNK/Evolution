@@ -245,9 +245,8 @@ public:
                           IsAddChildFunction &&IsAddChild) const {
     auto visited = StateSet{};
     auto currentGen = startStates;
-    auto nextGen = StateSet{};
-
     while (currentGen.size() > 0) {
+      auto nextGen = StateSet{};
       for (auto state : currentGen) {
         Act(state);
         visited.insert(state);

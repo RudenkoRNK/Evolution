@@ -32,7 +32,7 @@ private:
   using CrossoverFunction = typename GeneratorTraits::Function<CrossoverFG>;
 
   template <class T>
-  auto constexpr static isVariant =
+  bool constexpr static isVariant =
       TypeTraits::isInstanceOf<std::remove_reference_t<T>, std::variant>;
 
 public:

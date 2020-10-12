@@ -57,7 +57,7 @@ public:
   }
 
   template <class GenerationActionFunctionT>
-  void Run(GenerationActionFunctionT &GenerationAction) {
+  void Run(GenerationActionFunctionT &&GenerationAction) {
     static_assert(std::is_convertible_v<GenerationActionFunctionT,
                                         GenerationActionFunction>);
     do {

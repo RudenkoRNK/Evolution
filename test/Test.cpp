@@ -145,6 +145,7 @@ BOOST_AUTO_TEST_CASE(swap_args_test) {
   auto Evaluate = [](DNA const &x) { return 1.0; };
   auto Mutate = [](DNA x) { return x; };
   auto Crossover = [](DNA const &x, DNA y) {
+    // NOLINTNEXTLINE
     auto z = DNA(x);
     return y;
   };
@@ -190,7 +191,7 @@ BOOST_AUTO_TEST_CASE(grades_preserve_test) {
   auto grades = env.GetGrades();
   auto g1 = grades.at(1);
   auto g2 = grades.at(2);
-  env.Run(10);
+  env.Run(size_t{10});
   grades = env.GetGrades();
   BOOST_TEST(g1 == grades.at(1));
   BOOST_TEST(g2 == grades.at(2));
