@@ -307,29 +307,13 @@ public:
              std::to_string(state.value()) + ".";
     return {};
   }
-  void Print(std::ostream &out) {
+  void Print(std::ostream &out) const {
     auto VertexWriter = [&](std::ostream &out, State state) {
       auto index =
           IsIndexSet(state) ? " (" + std::to_string(GetIndex(state)) + ")" : "";
       auto shape = IsEvaluate(state) ? "diamond" : "circle";
       out << "[label=\"" << state << index << "\", ";
       out << "shape=" << shape << "]";
-    };
-    boost::write_graphviz(out, G, VertexWriter);
-  }
-  template <class IsComputedSet, class IsEvaluatedSet>
-  void Print(std::ostream &out, IsComputedSet const &isComputedSet,
-             IsEvaluatedSet const &isEvaluatedSet) {
-    auto VertexWriter = [&](std::ostream &out, State state) {
-      auto index =
-          IsIndexSet(state) ? " (" + std::to_string(GetIndex(state)) + ")" : "";
-      auto shape = IsEvaluate(state) ? "diamond" : "circle";
-      auto color = isEvaluatedSet.count(state) != 0
-                       ? "green"
-                       : isComputedSet.count(state) != 0 ? "yellow" : "black";
-      out << "[label=\"" << state << index << "\", ";
-      out << "shape=" << shape << ", ";
-      out << "color=" << color << "]";
     };
     boost::write_graphviz(out, G, VertexWriter);
   }

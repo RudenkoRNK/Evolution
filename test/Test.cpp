@@ -3,11 +3,12 @@
 #include "Evolution/Environment.hpp"
 #include "Evolution/StateFlow.hpp"
 #include "Evolution/TaskFlow.hpp"
-#include "tbb/enumerable_thread_specific.h"
-#include "tbb/flow_graph.h"
+#include "Evolution/Utils.hpp"
 #include <boost/test/included/unit_test.hpp>
 #include <functional>
 #include <random>
+#include <tbb/enumerable_thread_specific.h>
+#include <tbb/flow_graph.h>
 
 BOOST_AUTO_TEST_CASE(first_test) {
   auto sf = Evolution::StateFlow{};
@@ -64,10 +65,8 @@ BOOST_AUTO_TEST_CASE(quadratic_equation) {
   };
 
   auto N = 100;
-  using Env = Evolution::Environment<decltype(Evaluate), decltype(MutateGen),
-                                     decltype(Crossover)>;
 
-  auto sf = Env::GenerateStateFlow(N);
+  auto sf = Evolution::GenerateStateFlow(N);
   auto env = Evolution::Environment(Generator, Evaluate, MutateGen, Crossover,
                                     sf, true);
 

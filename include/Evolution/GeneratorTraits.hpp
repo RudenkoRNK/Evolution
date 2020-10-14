@@ -1,6 +1,6 @@
 #pragma once
 #include "Utility/TypeTraits.hpp"
-#include "tbb/enumerable_thread_specific.h"
+#include <tbb/enumerable_thread_specific.h>
 
 namespace Utility {
 
@@ -19,16 +19,11 @@ struct GeneratorTraits final {
   using ThreadSpecific = tbb::enumerable_thread_specific<Function<FG>>;
 
   template <class FG>
-  using ThreadSpecificOrGlobalFunction =
+  using ThreadGeneratorOrFunction =
       std::conditional_t<isGenerator<FG>, ThreadSpecific<FG>, Function<FG>>;
 
   template <class FG>
-  using ThreadSpecificOrGlobalRefFunction =
-      std::conditional_t<isGenerator<FG>, ThreadSpecific<FG>,
-                         std::add_lvalue_reference_t<Function<FG>>>;
-
-  template <class FG>
-  auto static GetThreadSpecificOrGlobal(FG &&fg) noexcept(!isGenerator<FG>)
+  auto static GetThreadGeneratorOrFunction(FG &&fg) noexcept(!isGenerator<FG>)
       -> std::conditional_t<isGenerator<FG>, ThreadSpecific<FG>, FG &&> {
     if constexpr (!isGenerator<FG>)
       return std::forward<FG>(fg);
@@ -37,7 +32,7 @@ struct GeneratorTraits final {
   }
 
   template <class FG>
-  auto static GetFunction(ThreadSpecificOrGlobalFunction<FG> &
+  auto static GetFunction(ThreadGeneratorOrFunction<FG> &
                               ThreadSpecificOrGlobal) noexcept(!isGenerator<FG>)
       -> std::add_lvalue_reference_t<Function<FG>> {
     if constexpr (!isGenerator<FG>)
