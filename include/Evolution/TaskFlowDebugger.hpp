@@ -41,6 +41,7 @@ public:
     outputAddress.clear();
 #endif // !NDEBUG
   }
+
   void SetStateFlow(StateFlow const &stateFlow_) {
 #ifndef NDEBUG
     stateFlow = stateFlow_;
@@ -49,21 +50,14 @@ public:
 
   void Register(DNA *dnaPtr, State state, bool isReadOnly, NodeType nodeType) {
 #ifndef NDEBUG
-    RegisterInput(dnaPtr, state, nodeType);
-    if (isReadOnly)
-      RegisterRead(dnaPtr, state);
-    else
-      RegisterWrite(dnaPtr, state);
+    RegisterState(dnaPtr, state, nodeType);
+    RegisterAddress(dnaPtr, state, isReadOnly);
 #endif // !NDEBUG
   }
 
   void Unregister(DNA *dnaPtr, State state) {
 #ifndef NDEBUG
-    CheckRegistry(dnaPtr, state);
-    if (writePoll.count(dnaPtr) > 0 && writePoll.at(dnaPtr) > 0)
-      --writePoll.at(dnaPtr);
-    else
-      --readPoll.at(dnaPtr);
+    UnregisterAddress(dnaPtr, state);
 #endif // !NDEBUG
   }
 
@@ -75,30 +69,55 @@ public:
   }
 
 private:
-  void RegisterWrite(DNA *dnaPtr, State state) {
-    CheckRegistry(dnaPtr, state);
-    CheckRace(dnaPtr, state, /*isReadOnly=*/false);
-    if (writePoll.count(dnaPtr) == 0)
-      // emplace will not have effect if key is already in a map
-      writePoll.emplace(dnaPtr, 0);
-    ++writePoll.at(dnaPtr);
-  }
-  void RegisterRead(DNA *dnaPtr, State state) {
-    CheckRegistry(dnaPtr, state);
-    CheckRace(dnaPtr, state, /*isReadOnly=*/true);
-    if (readPoll.count(dnaPtr) == 0)
-      readPoll.emplace(dnaPtr, 0);
-    ++readPoll.at(dnaPtr);
-  }
-  void RegisterInput(DNA *dnaPtr, State state, NodeType nodeType) {
+  // Methods checking for tbb::flow and StateFlow synchronization
+  void RegisterState(DNA *dnaPtr, State state, NodeType nodeType) {
     CheckType(dnaPtr, state, nodeType);
-    CheckInputOrder(dnaPtr, state, nodeType);
+    CheckParentsComputed(dnaPtr, state);
+    CheckChildrenNotComputed(dnaPtr, state);
+    CheckComputeOrder(dnaPtr, state, nodeType);
     if (inputAddress.count(state) == 0)
       inputAddress.emplace(state, Addresses{});
     inputAddress.at(state).push_back(dnaPtr);
   }
-
-  void CheckInputOrder(DNA *dnaPtr, State state, NodeType nodeType) {
+  void CheckType(DNA *dnaPtr, State state, NodeType nodeType) {
+    auto msg = std::string{
+        "tbb::flow and StateFlow are out of sync. Found an attempt to compute "
+        "state with incompatible method "};
+    switch (nodeType) {
+    case NodeType::Input:
+      CheckError(dnaPtr, state, stateFlow.IsInitialState(state),
+                 msg + "(input)");
+      break;
+    case NodeType::Evaluate:
+      CheckError(dnaPtr, state, stateFlow.IsEvaluate(state),
+                 msg + "(evaluate)");
+      break;
+    case NodeType::Mutate:
+      CheckError(dnaPtr, state, stateFlow.IsMutate(state), msg + "(mutate)");
+      break;
+    case NodeType::Crossover:
+      CheckError(dnaPtr, state, stateFlow.IsCrossover(state),
+                 msg + "(crossover)");
+      break;
+    default:
+      assert(false && "Invalid node type");
+      break;
+    }
+  }
+  void CheckParentsComputed(DNA *dnaPtr, State state) {
+    if (stateFlow.IsInitialState(state))
+      return;
+    auto p1 = stateFlow.GetAnyParent(state);
+    CheckComputed(dnaPtr, p1);
+    if (stateFlow.IsCrossover(state))
+      CheckComputed(dnaPtr, stateFlow.GetOtherParent(p1, state));
+  }
+  void CheckChildrenNotComputed(DNA *dnaPtr, State state) {
+    auto &&[cB, cE] = stateFlow.GetChildStates(state);
+    for (auto i = cB; i != cE; ++i)
+      CheckNotComputed(dnaPtr, *i);
+  }
+  void CheckComputeOrder(DNA *dnaPtr, State state, NodeType nodeType) {
     auto msg = std::string{
         "tbb::flow and StateFlow are out of sync. Found an "
         "attempt to compute states in the wrong order. Faulty operation: "};
@@ -128,37 +147,63 @@ private:
     CheckError(dnaPtr, state, outputAddress.count(state) == 0,
                "Found an attempt to register second output for the same state");
   }
-  void CheckType(DNA *dnaPtr, State state, NodeType nodeType) {
-    auto msg = std::string{
-        "tbb::flow and StateFlow are out of sync. Found an attempt to compute "
-        "state with incompatible method "};
-    switch (nodeType) {
-    case NodeType::Input:
-      CheckError(dnaPtr, state, stateFlow.IsInitialState(state),
-                 msg + "(input)");
-      break;
-    case NodeType::Evaluate:
-      CheckError(dnaPtr, state, stateFlow.IsEvaluate(state),
-                 msg + "(evaluate)");
-      break;
-    case NodeType::Mutate:
-      CheckError(dnaPtr, state, stateFlow.IsMutate(state), msg + "(mutate)");
-      break;
-    case NodeType::Crossover:
-      CheckError(dnaPtr, state, stateFlow.IsCrossover(state),
-                 msg + "(crossover)");
-      break;
-    default:
-      assert(false && "Invalid node type");
-      break;
-    }
+  void CheckComputed(DNA *dnaPtr, State state) {
+    auto realInCnt = GetInputCount(state);
+    auto realOutCnt = GetOutputCount(state);
+    auto inCnt = stateFlow.IsCrossover(state) ? 2 : 1;
+    bool isInCountCorrect =
+        realInCnt == inCnt ||
+        (stateFlow.IsEvaluate(state) && realInCnt == inCnt + 1);
+    auto isOutCountCorrect = realOutCnt == 1;
+    CheckError(dnaPtr, state, isInCountCorrect && isOutCountCorrect,
+               "tbb::flow and StateFlow out of sync. Found state which should "
+               "be computed, but it is not");
+  }
+  void CheckNotComputed(DNA *dnaPtr, State state) {
+    auto realInCnt = GetInputCount(state);
+    auto realOutCnt = GetOutputCount(state);
+    CheckError(dnaPtr, state, realInCnt == 0 && realOutCnt == 0,
+               "tbb::flow and StateFlow out of sync. Found state which should "
+               "not be computed, but it is");
+  }
+  size_t GetInputCount(State state) {
+    return inputAddress.count(state) > 0 ? inputAddress.at(state).size() : 0;
+  }
+  size_t GetOutputCount(State state) { return outputAddress.count(state); }
+
+  // Methods checking for race conditions
+  void RegisterAddress(DNA *dnaPtr, State state, bool isReadOnly) {
+    if (isReadOnly)
+      RegisterRead(dnaPtr, state);
+    else
+      RegisterWrite(dnaPtr, state);
+  }
+  void RegisterRead(DNA *dnaPtr, State state) {
+    CheckRegistry(dnaPtr, state);
+    CheckRace(dnaPtr, state, /*isReadOnly=*/true);
+    if (readPoll.count(dnaPtr) == 0)
+      readPoll.emplace(dnaPtr, 0);
+    ++readPoll.at(dnaPtr);
+  }
+  void RegisterWrite(DNA *dnaPtr, State state) {
+    CheckRegistry(dnaPtr, state);
+    CheckRace(dnaPtr, state, /*isReadOnly=*/false);
+    if (writePoll.count(dnaPtr) == 0)
+      // emplace will not have effect if key is already in a map
+      writePoll.emplace(dnaPtr, 0);
+    ++writePoll.at(dnaPtr);
+  }
+  void UnregisterAddress(DNA *dnaPtr, State state) {
+    CheckRegistry(dnaPtr, state);
+    CheckRegistered(dnaPtr, state);
+    if (writePoll.count(dnaPtr) > 0 && writePoll.at(dnaPtr) > 0)
+      --writePoll.at(dnaPtr);
+    else
+      --readPoll.at(dnaPtr);
   }
   void CheckRegistry(DNA *dnaPtr, State state) {
-    auto writeCnt = writePoll.count(dnaPtr) > 0
-                        ? static_cast<int>(writePoll.at(dnaPtr))
-                        : 0;
-    auto readCnt =
-        readPoll.count(dnaPtr) > 0 ? static_cast<int>(readPoll.at(dnaPtr)) : 0;
+    auto writeCnt = GetWriteCount(dnaPtr);
+    auto readCnt = GetReadCount(dnaPtr);
     CheckError(dnaPtr, state, writeCnt >= 0 && readCnt >= 0,
                "Found dna which has more unregisters than registrations");
     CheckError(dnaPtr, state, writeCnt < 2,
@@ -166,14 +211,29 @@ private:
     CheckError(dnaPtr, state, !writeCnt || !readCnt,
                "Found race condition with simultaneous read and write");
   }
+  void CheckRegistered(DNA *dnaPtr, State state) {
+    auto writeCnt = GetWriteCount(dnaPtr);
+    auto readCnt = GetReadCount(dnaPtr);
+    CheckError(dnaPtr, state, writeCnt || readCnt,
+               "Found dna which should be registered but it is not");
+  }
   void CheckRace(DNA *dnaPtr, State state, bool isReadOnly) {
-    auto isInWritePoll =
-        writePoll.count(dnaPtr) > 0 && writePoll.at(dnaPtr) > 0;
-    auto isInReadPoll = readPoll.count(dnaPtr) > 0 && readPoll.at(dnaPtr) > 0;
+    auto isInWritePoll = GetWriteCount(dnaPtr) > 0;
+    auto isInReadPoll = GetReadCount(dnaPtr) > 0;
     CheckError(dnaPtr, state, !isInWritePoll && (isReadOnly || !isInReadPoll),
                "Found DNA which is going to be modified by one operation, "
                "but it is currently in progress in another operation");
   }
+  int GetWriteCount(DNA *dnaPtr) {
+    return writePoll.count(dnaPtr) > 0 ? static_cast<int>(writePoll.at(dnaPtr))
+                                       : 0;
+  }
+  int GetReadCount(DNA *dnaPtr) {
+    return readPoll.count(dnaPtr) > 0 ? static_cast<int>(readPoll.at(dnaPtr))
+                                      : 0;
+  }
+
+  // Common methods
   void CheckError(DNA *dnaPtr, State state, bool condition,
                   std::string const &msg) {
     if (condition)

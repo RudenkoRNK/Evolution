@@ -145,10 +145,10 @@ public:
       return *(oB + 1);
     return *oB;
   }
-  State GetCrossoverPair(State parent, State child) const {
-    auto e = boost::edge(parent, child, G);
-    assert(e.second);
-    return GetSource(e.first);
+  State GetOtherParent(State parent, State child) const {
+    auto [op, presence] = boost::edge(parent, child, G);
+    assert(presence);
+    return GetSource(GetCrossoverPair(op));
   }
   StateSet const &GetInitialStates() const noexcept { return initialStates; }
   StateSet const &GetEvaluateStates() const noexcept { return evaluateStates; }
