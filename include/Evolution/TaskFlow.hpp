@@ -14,7 +14,6 @@
 #include <tbb/concurrent_unordered_set.h>
 #include <tbb/enumerable_thread_specific.h>
 #include <tbb/flow_graph.h>
-#include <tbb/parallel_for_each.h>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -40,12 +39,27 @@ private:
 public:
   using DNA = std::remove_cvref_t<
       typename ArgumentTraits<EvaluateFunction>::template Type<1>>;
+  using Population = std::vector<DNA>;
+
+  using Grade = typename ArgumentTraits<EvaluateFunction>::template Type<0>;
+  using Grades = std::vector<Grade>;
 
 private:
   // DNA should be a modifiable self-sufficient type
   static_assert(!std::is_const_v<DNA>);
   static_assert(!std::is_reference_v<DNA>);
-  // static_assert(noexcept(DNA(std::declval<DNA>())));
+  static_assert(std::is_copy_constructible_v<DNA>);
+  static_assert(std::is_move_constructible_v<DNA>);
+  static_assert(std::is_copy_assignable_v<DNA>);
+  static_assert(std::is_move_assignable_v<DNA>);
+
+  // Grade should be a value
+  static_assert(!std::is_const_v<Grade>);
+  static_assert(!std::is_reference_v<Grade>);
+  static_assert(std::is_copy_constructible_v<Grade>);
+  static_assert(std::is_move_constructible_v<Grade>);
+  static_assert(std::is_copy_assignable_v<Grade>);
+  static_assert(std::is_move_assignable_v<Grade>);
 
   // Check that arguments and return values of functions are of type DNA
   static_assert(std::is_same_v<DNA, std::remove_cvref_t<typename ArgumentTraits<
@@ -146,11 +160,16 @@ private:
     bool isMutateLightweight;
     bool isCrossoverLightweight;
   };
+  TBBFlow tbbFlow;
+  StateFlow stateFlow;
+  TaskFlowDebugger<DNA> debugger;
+  tbb::concurrent_unordered_map<DNAPtr, Grade, std::hash<DNAPtr>>
+      evaluateBuffer;
+  EvaluateTFG evaluateTFG;
+  MutateTFG mutateTFG;
+  CrossoverTFG crossoverTFG;
 
 public:
-  using Population = std::vector<DNA>;
-  using Grades = std::vector<double>;
-
   TaskFlow(EvaluateFG const &Evaluate, MutateFG const &Mutate,
            CrossoverFG const &Crossover, StateFlow const &stateFlow,
            bool isEvaluateLightweight = false, bool isMutateLightweight = false,
@@ -169,12 +188,26 @@ public:
   }
 
   Grades EvaluatePopulation(Population const &population) {
-    auto indices = Utility::GetIndices(population.size());
-    auto grades = Grades(population.size());
-    tbb::parallel_for_each(indices.begin(), indices.end(), [&](size_t index) {
-      auto &&Evaluate = GetEvaluateFunction();
-      grades.at(index) = Evaluate(population.at(index));
-    });
+    auto grades = Grades{};
+    if constexpr (std::is_default_constructible_v<Grade>) {
+      grades.resize(population.size());
+      std::transform(std::execution::par_unseq, population.begin(),
+                     population.end(), grades.begin(), [&](auto const &dna) {
+                       auto &&Evaluate = GetEvaluateFunction();
+                       return Evaluate(dna);
+                     });
+    } else {
+      grades.reserve(population.size());
+      auto indices = Utility::GetIndices(population.size());
+      auto gradesPar = tbb::concurrent_unordered_map<size_t, Grade>{};
+      std::for_each(std::execution::par_unseq, indices.begin(), indices.end(),
+                    [&](auto index) {
+                      auto &&Evaluate = GetEvaluateFunction();
+                      gradesPar.emplace(index, Evaluate(population.at(index)));
+                    });
+      for (auto index : indices)
+        grades.push_back(std::move(gradesPar.at(index)));
+    }
     return grades;
   }
 
@@ -217,14 +250,6 @@ public:
   }
 
 private:
-  TBBFlow tbbFlow;
-  StateFlow stateFlow;
-  TaskFlowDebugger<DNA> debugger;
-  tbb::concurrent_unordered_map<DNAPtr, double, std::hash<DNAPtr>>
-      evaluateBuffer;
-  EvaluateTFG evaluateTFG;
-  MutateTFG mutateTFG;
-  CrossoverTFG crossoverTFG;
 
   EvaluateFunction &GetEvaluateFunction() {
     return GeneratorTraits::GetFunction<EvaluateFG>(evaluateTFG);
@@ -249,20 +274,13 @@ private:
     debugger.RegisterOutput(ret.get(), state);
     return ret;
   }
-  void EvaluateHelper(DNAPtr iSrc, bool isCopy, State state) {
-    auto iSrcOrig = iSrc;
-    debugger.Register(iSrcOrig.get(), state, isCopy, NodeType::Evaluate);
+  void EvaluateHelper(DNAPtr iSrc, State state) {
+    debugger.Register(iSrc.get(), state, /*isReadOnly=*/true,
+                      NodeType::Evaluate);
 
-    // Actually this functionality should not be used
-    assert(!isCopy);
-
-    if (isCopy)
-      iSrc = CopyHelper(*iSrc);
     auto &&Evaluate = GetEvaluateFunction();
-    auto grade = Evaluate(*iSrc);
-    evaluateBuffer.emplace(iSrc, grade);
-
-    debugger.Unregister(iSrcOrig.get(), state);
+    auto &&grade = Evaluate(*iSrc);
+    evaluateBuffer.emplace(iSrc, std::move(grade));
   }
   DNAPtr MutateHelper(DNAPtr iSrc, bool isCopy, State state) {
     auto iSrcOrig = iSrc;
@@ -401,14 +419,13 @@ private:
     return tbbFlow.inputNodes.back();
   }
   template <class Node>
-  EvaluateNode &AddEvaluate(TBBFlow &tbbFlow, Node &predecessor, bool isCopy,
-                            State state) {
+  EvaluateNode &AddEvaluate(TBBFlow &tbbFlow, Node &predecessor, State state) {
     // Should be preallocated to avoid refs invalidation
     assert(tbbFlow.evaluateNodes.capacity() > tbbFlow.evaluateNodes.size());
     tbbFlow.evaluateNodes.push_back(MakeNode<EvaluateNode>(
         tbbFlow.isEvaluateLightweight, *tbbFlow.graphPtr,
-        tbb::flow::concurrency::serial, [&, isCopy, state](DNAPtr iSrc) {
-          EvaluateHelper(iSrc, isCopy, state);
+        tbb::flow::concurrency::serial, [&, state](DNAPtr iSrc) {
+          EvaluateHelper(iSrc, state);
           return 0;
         }));
     if constexpr (isVariant<Node>)
@@ -522,6 +539,8 @@ private:
     auto loneInitials = std::unordered_set<State>{};
 
 #ifndef NDEBUG
+    auto visitedStates = std::unordered_set<State>{};
+    auto resolvedStates = std::unordered_set<State>{};
     auto resolvedEvaluates = std::unordered_set<State>{};
     auto maxIterations = stateFlow.GetNStates() + 1;
     auto whileGuard = size_t{0};
@@ -573,9 +592,7 @@ private:
       if (stateFlow.IsInitialState(state))
         return;
       std::visit(
-          [&](auto nodeRef) {
-            AddEvaluate(tbbFlow, nodeRef.get(), /*isCopy*/ false, state);
-          },
+          [&](auto nodeRef) { AddEvaluate(tbbFlow, nodeRef.get(), state); },
           nodes.at(state));
     };
     auto ResolveMutate = [&](State state) {
@@ -613,10 +630,16 @@ private:
 
     bool modified = true;
     auto Act = [&](State state) {
+#ifndef NDEBUG
+      visitedStates.insert(state);
+#endif // !NDEBUG
       if (IsResolved(state))
         return;
       if (!IsResolvable(state))
         return;
+#ifndef NDEBUG
+      resolvedStates.insert(state);
+#endif // !NDEBUG
       modified = true;
       if (stateFlow.IsInitialState(state))
         ResolveInitial(state);
@@ -635,6 +658,8 @@ private:
       assert(whileGuard++ < maxIterations);
     }
     assert(nodes.size() + loneInitials.size() == stateFlow.GetNStates());
+    assert(visitedStates.size() == stateFlow.GetNStates());
+    assert(resolvedStates.size() == stateFlow.GetNStates());
     assert(evaluateCount == stateFlow.GetNEvaluates());
 
     tbbFlow.nonEvaluateInitialIndices =
@@ -678,9 +703,9 @@ private:
     auto idxIt = tbbFlow.nonEvaluateInitialIndices.begin();
     for (auto i = size_t{0}, e = evaluateBuffer.size(); i != e; ++i) {
       auto index = *idxIt;
-      auto [dnaPtr, grade] = *ebIt;
+      auto &&[dnaPtr, grade] = *ebIt;
       population.at(index) = std::move(*dnaPtr);
-      grades.at(index) = grade;
+      grades.at(index) = std::move(grade);
       ++ebIt;
       ++idxIt;
     }

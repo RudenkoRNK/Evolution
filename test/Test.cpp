@@ -195,3 +195,115 @@ BOOST_AUTO_TEST_CASE(grades_preserve_test) {
   BOOST_TEST(g1 == grades.at(1));
   BOOST_TEST(g2 == grades.at(2));
 }
+
+BOOST_AUTO_TEST_CASE(random_flow_test) {
+  auto Evaluate = [](double x) {
+    auto static thread_local gen = std::mt19937(412);
+    auto rand = std::uniform_real_distribution<>();
+    return rand(gen);
+  };
+  auto Mutate = [](double x) {
+    auto static thread_local gen = std::mt19937(433);
+    auto rand = std::uniform_real_distribution<>();
+    return rand(gen);
+  };
+  auto Crossover = [](double x, double y) {
+    auto static thread_local gen = std::mt19937(444);
+    auto rand = std::uniform_real_distribution<>();
+    return rand(gen);
+  };
+  auto Generator = []() -> double {
+    auto static thread_local gen = std::mt19937(100);
+    auto rand = std::uniform_real_distribution<>();
+    return rand(gen);
+  };
+
+  auto gen = std::mt19937(500);
+  auto rand = std::uniform_int_distribution<>();
+  auto nextInd = 0;
+  auto GetRandomState = [&](Evolution::StateFlow &sf) {
+    auto &&[sb, se] = sf.GetStates();
+    auto i = rand(gen) % (se - sb);
+    return *(sb + i);
+  };
+  auto AddInitial = [&](Evolution::StateFlow &sf) {
+    if (rand(gen) % 3 == 0)
+      ++nextInd;
+    sf.GetOrAddInitialState(++nextInd);
+  };
+  auto AddMutate = [&](Evolution::StateFlow &sf) {
+    return sf.AddMutate(GetRandomState(sf));
+  };
+  auto AddCrossover = [&](Evolution::StateFlow &sf) {
+    auto s1 = GetRandomState(sf);
+    auto s2 = GetRandomState(sf);
+    if (s1 == s2)
+      s2 = sf.AddMutate(s2);
+    return sf.AddCrossover(s1, s2);
+  };
+  auto AddEvaluate = [&](Evolution::StateFlow &sf) {
+    sf.SetEvaluate(GetRandomState(sf));
+  };
+  auto AddEvaluateOnLeaves = [&](Evolution::StateFlow &sf) {
+    auto &&[sb, se] = sf.GetStates();
+    for (auto si = sb; si != se; ++si)
+      if (sf.IsLeaf(*si))
+        sf.SetEvaluate(*si);
+  };
+  auto SFGen = [&]() {
+    auto rand = std::uniform_int_distribution<>();
+    auto sf = Evolution::StateFlow{};
+    sf.GetOrAddInitialState(++nextInd);
+    sf.GetOrAddInitialState(++nextInd);
+    for (auto i = 0; i < 1000; ++i) {
+      auto dice = rand(gen);
+      if (dice % 10 == 0)
+        AddInitial(sf);
+      else if (dice % 2 == 0)
+        AddMutate(sf);
+      else
+        AddCrossover(sf);
+    };
+    for (auto i = 0; i < 200; ++i)
+      AddEvaluate(sf);
+    AddEvaluateOnLeaves(sf);
+    auto nEvs = int(sf.GetNEvaluates());
+    auto minEvals = int(std::max(sf.GetIndex(sf.GetMaxIndexState()),
+                                 sf.GetInitialStates().size()));
+    for (auto i = nEvs; i < minEvals; ++i)
+      sf.SetEvaluate(AddMutate(sf));
+
+    return sf;
+  };
+
+  auto env = Evolution::Environment(Generator, Evaluate, Mutate, Crossover,
+                                    SFGen(), true);
+  auto t = SFGen();
+  for (auto i = 0; i < 10; ++i) {
+    env.RegeneratePopulation();
+    env.SetStateFlow(Evolution::StateFlow(t));
+    env.Run(size_t{5});
+  }
+}
+
+BOOST_AUTO_TEST_CASE(ctor_test) {
+  struct DNA {
+    int x;
+    int y;
+    DNA() = delete;
+    DNA(int x, int y) : x(x), y(y) {}
+  };
+  using Grade = DNA;
+
+  auto Evaluate = [](DNA x) { return x; };
+  auto Mutate = [](DNA x) { return x; };
+  auto Crossover = [](DNA x, DNA y) { return x; };
+  auto generator = []() -> DNA { return DNA(1, 2); };
+
+  auto env = Evolution::Environment(generator, Evaluate, Mutate, Crossover,
+                                    Evolution::GenerateStateFlow(10), false,
+                                    [](auto const &x, auto const &y) {
+                                      return Utility::GetIndices(x.size());
+                                    });
+  env.Run();
+}

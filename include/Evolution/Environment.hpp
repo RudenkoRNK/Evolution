@@ -12,6 +12,7 @@ private:
 
 public:
   using DNA = typename TaskFlowInst::DNA;
+  using Grade = typename TaskFlowInst::Grade;
   using Population = typename TaskFlowInst::Population;
   using Grades = typename TaskFlowInst::Grades;
 
@@ -22,18 +23,18 @@ private:
       std::function<bool(Population const &, Grades const &)>;
   using DNAGeneratorFunction = std::function<DNA()>;
   DNAGeneratorFunction DNAGenerator;
+  SortPopulationFunction SortPopulation_;
   TaskFlowInst taskFlow;
   Population population;
   Grades grades;
-  SortPopulationFunction SortPopulation_;
 
 public:
-  template <class DNAGeneratorFunctionT>
-  Environment(DNAGeneratorFunctionT const &DNAGenerator,
+  Environment(DNAGeneratorFunction const &DNAGenerator,
               EvaluateFG const &Evaluate, MutateFG const &Mutate,
               CrossoverFG const &Crossover, StateFlow const &stateFlow,
-              bool isBenchmarkFunctions = false)
-      : DNAGenerator(DNAGeneratorFunction(DNAGenerator)),
+              bool isBenchmarkFunctions = false,
+              SortPopulationFunction const &SortPopulation_ = GetSortFunction())
+      : DNAGenerator(DNAGenerator), SortPopulation_(SortPopulation_),
         taskFlow(Evaluate, Mutate, Crossover, stateFlow,
                  isBenchmarkFunctions && TaskFlowInst::IsEvaluateLightweight(
                                              Evaluate, this->DNAGenerator()),
@@ -42,8 +43,6 @@ public:
                  isBenchmarkFunctions && TaskFlowInst::IsCrossoverLightweight(
                                              Crossover, this->DNAGenerator(),
                                              this->DNAGenerator())) {
-    static_assert(
-        std::is_convertible_v<DNAGeneratorFunctionT, DNAGeneratorFunction>);
     ResizePopulation(stateFlow.GetNEvaluates());
   }
 
@@ -73,6 +72,8 @@ public:
 
   // Also can be used to provide DNA examples
   void SetPopulation(Population &&population) {
+    assert(population.size() <= GetPopulation().size() &&
+           "For setting larger population, first extend stateFlow");
     AppendPopulation(std::move(population), population.size());
   }
 
@@ -84,18 +85,9 @@ public:
     SetPopulation(std::move(newPop));
   }
 
-  template <class SortPopulationFunctionT>
-  void SetSortPopulationFunction(SortPopulationFunctionT &&SortPopulation_) {
-    static_assert(
-        std::is_convertible_v<SortPopulationFunctionT, SortPopulationFunction>);
-    this->SortPopulation_ = SortPopulationFunction(
-        std::forward<SortPopulationFunctionT>(SortPopulation_));
-    SortPopulation(population, grades);
-  }
-
   void SetStateFlow(StateFlow &&stateFlow) {
     taskFlow.SetStateFlow(std::move(stateFlow));
-    ResizePopulation(stateFlow.GetNEvaluates());
+    ResizePopulation(taskFlow.GetStateFlow().GetNEvaluates());
   }
 
 private:
@@ -107,8 +99,8 @@ private:
       std::generate_n(std::back_inserter(next), diff, DNAGenerator);
       AppendPopulation(std::move(next));
     } else {
-      grades.resize(newSize);
-      population.resize(newSize, DNAGenerator());
+      grades.erase(grades.begin() + newSize, grades.end());
+      population.erase(population.begin() + newSize, population.end());
     }
     assert(Verify(population, grades));
   }
@@ -129,16 +121,7 @@ private:
   }
 
   void SortPopulation(Population &population, Grades &grades) const {
-    auto permutation = std::vector<size_t>{};
-    if (SortPopulation_)
-      permutation = SortPopulation_(population, grades);
-    else {
-      permutation = Utility::GetIndices(population.size());
-      std::sort(permutation.begin(), permutation.end(),
-                [&](size_t index0, size_t index1) {
-                  return grades.at(index0) > grades.at(index1);
-                });
-    }
+    auto permutation = SortPopulation_(population, grades);
     Utility::Permute(population, permutation, std::identity{});
     Utility::Permute(grades, permutation, std::identity{});
   }
@@ -147,12 +130,24 @@ private:
     return taskFlow.GetStateFlow().GetNEvaluates();
   }
 
-  bool Verify(Population const &population, Grades const &grades) const
-      noexcept {
+  bool Verify(Population const &population, Grades const &grades) const {
     auto verified = true;
     verified &= population.size() == GetPopulationSize();
     verified &= grades.size() == GetPopulationSize();
     return verified;
+  }
+
+  auto static GetSortFunction() {
+    static_assert(std::is_arithmetic_v<Grade>,
+                  "For custom Grades provide custom SortPopulation function");
+    return [](Population const &population, Grades const &grades) {
+      auto permutation = Utility::GetIndices(population.size());
+      std::sort(permutation.begin(), permutation.end(),
+                [&](size_t index0, size_t index1) {
+                  return grades.at(index0) > grades.at(index1);
+                });
+      return permutation;
+    };
   }
 };
 
