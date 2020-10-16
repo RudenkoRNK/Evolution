@@ -180,9 +180,7 @@ public:
     return GetIndex(state) != UndefinedIndex;
   }
   bool IsEvaluate(State state) const {
-    if (G[state].isEvaluate) {
-      assert(evaluateStates.contains(state));
-    }
+    assert(evaluateStates.contains(state) == G[state].isEvaluate);
     return G[state].isEvaluate;
   }
   bool IsLeaf(State state) const { return GetOutDegree(state) == 0; }
@@ -295,9 +293,9 @@ public:
              "initial states. Number of evaluates: " +
              std::to_string(nEvaluates) + ". Number of initial states: " +
              std::to_string(GetInitialStates().size()) + ".";
-    if (GetIndex(GetMaxIndexState()) > nEvaluates)
-      return "Number of evaluates must be greater or equal than number of "
-             "initial states. Number of evaluates: " +
+    if (GetIndex(GetMaxIndexState()) >= nEvaluates)
+      return "Number of evaluates must be greater than max index. Number of "
+             "evaluates: " +
              std::to_string(nEvaluates) +
              ". Maximum index among initial states: " +
              std::to_string(GetIndex(GetMaxIndexState())) +

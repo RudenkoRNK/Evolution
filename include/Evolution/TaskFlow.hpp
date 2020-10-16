@@ -685,13 +685,13 @@ private:
 
   void RunTaskFlow(Population &population) {
     assert(population.size() == GetPopulationSize());
-    debugger.Clear();
     evaluateBuffer.clear();
 
     for (auto i = size_t{0}; i < tbbFlow.inputNodes.size(); ++i)
       tbbFlow.inputNodes.at(i).try_put(
           &population.at(tbbFlow.inputIndices.at(i)));
     tbbFlow.graphPtr->wait_for_all();
+    debugger.Finish();
   }
 
   void MoveResultsFromBuffer(Population &population, Grades &grades) noexcept {

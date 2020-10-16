@@ -251,6 +251,7 @@ BOOST_AUTO_TEST_CASE(random_flow_test) {
         sf.SetEvaluate(*si);
   };
   auto SFGen = [&]() {
+    nextInd = 0;
     auto rand = std::uniform_int_distribution<>();
     auto sf = Evolution::StateFlow{};
     sf.GetOrAddInitialState(++nextInd);
@@ -268,7 +269,7 @@ BOOST_AUTO_TEST_CASE(random_flow_test) {
       AddEvaluate(sf);
     AddEvaluateOnLeaves(sf);
     auto nEvs = int(sf.GetNEvaluates());
-    auto minEvals = int(std::max(sf.GetIndex(sf.GetMaxIndexState()),
+    auto minEvals = int(std::max(sf.GetIndex(sf.GetMaxIndexState()) + 1,
                                  sf.GetInitialStates().size()));
     for (auto i = nEvs; i < minEvals; ++i)
       sf.SetEvaluate(AddMutate(sf));
@@ -278,10 +279,9 @@ BOOST_AUTO_TEST_CASE(random_flow_test) {
 
   auto env = Evolution::Environment(Generator, Evaluate, Mutate, Crossover,
                                     SFGen(), true);
-  auto t = SFGen();
   for (auto i = 0; i < 10; ++i) {
     env.RegeneratePopulation();
-    env.SetStateFlow(Evolution::StateFlow(t));
+    env.SetStateFlow(Evolution::StateFlow(SFGen()));
     env.Run(size_t{5});
   }
 }

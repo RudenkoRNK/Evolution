@@ -33,15 +33,6 @@ public:
 #endif // !NDEBUG
   }
 
-  void Clear() {
-#ifndef NDEBUG
-    writePoll.clear();
-    readPoll.clear();
-    inputAddress.clear();
-    outputAddress.clear();
-#endif // !NDEBUG
-  }
-
   void SetStateFlow(StateFlow const &stateFlow_) {
 #ifndef NDEBUG
     stateFlow = stateFlow_;
@@ -65,6 +56,18 @@ public:
 #ifndef NDEBUG
     CheckOutputOrder(dnaPtr, state);
     outputAddress.emplace(state, dnaPtr);
+#endif // !NDEBUG
+  }
+
+  void Finish() {
+#ifndef NDEBUG
+    auto &&[sb, se] = stateFlow.GetStates();
+    for (auto si = sb; si != se; ++si)
+      CheckComputed(nullptr, *si);
+    for (auto s : stateFlow.GetEvaluateStates())
+      CheckEvaluated(nullptr, s);
+    CheckWritePollEmpty();
+    Clear();
 #endif // !NDEBUG
   }
 
@@ -150,14 +153,42 @@ private:
   void CheckComputed(DNA *dnaPtr, State state) {
     auto realInCnt = GetInputCount(state);
     auto realOutCnt = GetOutputCount(state);
+    auto isInitialEvaluate =
+        stateFlow.IsInitialState(state) && stateFlow.IsEvaluate(state);
+    auto isLoneInitial =
+        isInitialEvaluate && stateFlow.GetOutDegree(state) == 0;
+    auto isTBBEvaluate = stateFlow.IsEvaluate(state) && !isInitialEvaluate;
+    if (isLoneInitial) {
+      CheckError(
+          dnaPtr, state, realInCnt == 0 && realOutCnt == 0,
+          "tbb::flow and StateFlow out of sync. Found lone-initial-evaluate "
+          "state which was computed, while it should not be");
+      return;
+    }
     auto inCnt = stateFlow.IsCrossover(state) ? 2 : 1;
-    bool isInCountCorrect =
-        realInCnt == inCnt ||
-        (stateFlow.IsEvaluate(state) && realInCnt == inCnt + 1);
-    auto isOutCountCorrect = realOutCnt == 1;
+    auto outCnt = 1;
+    bool isInCountCorrect = realInCnt == inCnt;
+    isInCountCorrect |= isTBBEvaluate && realInCnt == inCnt + 1;
+    auto isOutCountCorrect = realOutCnt == outCnt;
     CheckError(dnaPtr, state, isInCountCorrect && isOutCountCorrect,
                "tbb::flow and StateFlow out of sync. Found state which should "
                "be computed, but it is not");
+  }
+  void CheckEvaluated(DNA *dnaPtr, State state) {
+    assert(stateFlow.IsEvaluate(state));
+    auto isInitialEvaluate =
+        stateFlow.IsInitialState(state) && stateFlow.IsEvaluate(state);
+    auto isTBBEvaluate = stateFlow.IsEvaluate(state) && !isInitialEvaluate;
+    if (!isTBBEvaluate)
+      return;
+    auto inCnt = stateFlow.IsCrossover(state) ? 3 : 2;
+    CheckError(dnaPtr, state, GetInputCount(state) == inCnt,
+               "tbb::flow and StateFlow out of sync. Found state which should "
+               "be evaluated, but it is not");
+    auto evPtr = inputAddress.at(state).at(inCnt - 1);
+    CheckError(evPtr, state, readPoll.count(evPtr) > 0,
+               "tbb::flow and StateFlow out of sync. Found address which "
+               "should be reserved for read but it is not");
   }
   void CheckNotComputed(DNA *dnaPtr, State state) {
     auto realInCnt = GetInputCount(state);
@@ -224,6 +255,13 @@ private:
                "Found DNA which is going to be modified by one operation, "
                "but it is currently in progress in another operation");
   }
+  void CheckWritePollEmpty() {
+    for (auto &&[dna, counter] : writePoll) {
+      CheckError(
+          dna, State{}, counter == 0,
+          "Found DNA which is should not be registered for write, but it is");
+    }
+  }
   int GetWriteCount(DNA *dnaPtr) {
     return writePoll.count(dnaPtr) > 0 ? static_cast<int>(writePoll.at(dnaPtr))
                                        : 0;
@@ -262,6 +300,13 @@ private:
     auto dump = std::ofstream("dump.dot");
     stateFlow.Print(dump);
     dump.close();
+  }
+
+  void Clear() {
+    writePoll.clear();
+    readPoll.clear();
+    inputAddress.clear();
+    outputAddress.clear();
   }
 };
 
