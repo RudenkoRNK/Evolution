@@ -5,7 +5,7 @@
 
 namespace Evolution {
 
-template <class EvaluateFG, class MutateFG, class CrossoverFG>
+template <typename EvaluateFG, typename MutateFG, typename CrossoverFG>
 class Environment final {
 private:
   using TaskFlowInst = TaskFlow<EvaluateFG, MutateFG, CrossoverFG>;
@@ -55,7 +55,7 @@ public:
     Run([&](Population const &, Grades const &) { return --n > 0; });
   }
 
-  template <class GenerationActionFunctionT>
+  template <typename GenerationActionFunctionT>
   void Run(GenerationActionFunctionT &&GenerationAction) {
     static_assert(std::is_convertible_v<GenerationActionFunctionT,
                                         GenerationActionFunction>);

@@ -19,20 +19,20 @@
 #include <vector>
 
 namespace Evolution {
-template <class EvaluateFG, class MutateFG, class CrossoverFG>
+template <typename EvaluateFG, typename MutateFG, typename CrossoverFG>
 class TaskFlow final {
 
 private:
   using TypeTraits = Utility::TypeTraits;
   using GeneratorTraits = Utility::GeneratorTraits;
-  template <class Callable>
+  template <typename Callable>
   using ArgumentTraits = Utility::ArgumentTraits<Callable>;
 
   using EvaluateFunction = typename GeneratorTraits::Function<EvaluateFG>;
   using MutateFunction = typename GeneratorTraits::Function<MutateFG>;
   using CrossoverFunction = typename GeneratorTraits::Function<CrossoverFG>;
 
-  template <class T>
+  template <typename T>
   bool constexpr static isVariant =
       TypeTraits::isInstanceOf<std::remove_reference_t<T>, std::variant>;
 
@@ -118,9 +118,9 @@ private:
 
   using DNAPtr = std::shared_ptr<DNA>;
 
-  template <class Input, class Output = tbb::flow::continue_msg,
-            class Policy = tbb::flow::queueing,
-            class Allocator = tbb::flow::interface11::null_type>
+  template <typename Input, typename Output = tbb::flow::continue_msg,
+            typename Policy = tbb::flow::queueing,
+            typename Allocator = tbb::flow::interface11::null_type>
   using FunctionNode =
       tbb::flow::function_node<Input, Output, Policy, Allocator>;
 
@@ -397,7 +397,7 @@ private:
     return ret;
   }
 
-  template <class Node, class... Args>
+  template <typename Node, typename... Args>
   Node MakeNode(bool isLightweight, Args &&... args) {
     if (isLightweight)
       return Node(LightweightPolicyIndex, std::forward<Args>(args)...);
@@ -418,7 +418,7 @@ private:
     assert(tbbFlow.inputIndices.size() == tbbFlow.inputNodes.size());
     return tbbFlow.inputNodes.back();
   }
-  template <class Node>
+  template <typename Node>
   EvaluateNode &AddEvaluate(TBBFlow &tbbFlow, Node &predecessor, State state) {
     // Should be preallocated to avoid refs invalidation
     assert(tbbFlow.evaluateNodes.capacity() > tbbFlow.evaluateNodes.size());
@@ -440,7 +440,7 @@ private:
           tbbFlow.evaluateNodes.back());
     return tbbFlow.evaluateNodes.back();
   }
-  template <class Node>
+  template <typename Node>
   MutateNode &AddMutate(TBBFlow &tbbFlow, Node &predecessor, bool isCopy,
                         State state) {
     // Should be preallocated to avoid refs invalidation
@@ -462,7 +462,7 @@ private:
           tbbFlow.mutateNodes.back());
     return tbbFlow.mutateNodes.back();
   }
-  template <class Node0, class Node1>
+  template <typename Node0, typename Node1>
   CrossoverNode &AddCrossover(TBBFlow &tbbFlow, Node0 &predecessor0,
                               Node1 &predecessor1, bool isCopy0, bool isCopy1,
                               bool isSwapArgumentsAllowed, State state) {
@@ -711,7 +711,7 @@ private:
     }
   }
 
-  template <class DNAFirst>
+  template <typename DNAFirst>
   bool static IsCrossoverLightweight_(CrossoverFG const &Crossover,
                                       DNAFirst &&dna0, DNA const &dna1) {
     if constexpr (!isCrossoverInPlaceSecond)
@@ -723,7 +723,7 @@ private:
     return IsFGLightweight(Crossover, std::forward<DNAFirst>(dna0), dna1_);
   }
 
-  template <class FG, class... Args>
+  template <typename FG, typename... Args>
   bool static IsFGLightweight(FG const &Func, Args &&... args) {
     auto constexpr static maxLightweightClocks = size_t{1000000};
     auto &&Func_ =

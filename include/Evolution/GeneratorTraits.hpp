@@ -5,24 +5,24 @@
 namespace Utility {
 
 struct GeneratorTraits final {
-  template <class FG>
+  template <typename FG>
   auto constexpr static isGenerator =
       ArgumentTraits<std::remove_reference_t<FG>>::nArguments == 0;
 
-  template <class FG>
+  template <typename FG>
   using Function = std::conditional_t<
       isGenerator<FG>,
       typename ArgumentTraits<std::remove_reference_t<FG>>::template Type<0>,
       std::remove_reference_t<FG>>;
 
-  template <class FG>
+  template <typename FG>
   using ThreadSpecific = tbb::enumerable_thread_specific<Function<FG>>;
 
-  template <class FG>
+  template <typename FG>
   using ThreadGeneratorOrFunction =
       std::conditional_t<isGenerator<FG>, ThreadSpecific<FG>, Function<FG>>;
 
-  template <class FG>
+  template <typename FG>
   auto static GetThreadGeneratorOrFunction(FG &&fg) noexcept(!isGenerator<FG>)
       -> std::conditional_t<isGenerator<FG>, ThreadSpecific<FG>, FG &&> {
     if constexpr (!isGenerator<FG>)
@@ -31,7 +31,7 @@ struct GeneratorTraits final {
       return ThreadSpecific<FG>(std::forward<FG>(fg));
   }
 
-  template <class FG>
+  template <typename FG>
   auto static GetFunction(ThreadGeneratorOrFunction<FG> &
                               ThreadSpecificOrGlobal) noexcept(!isGenerator<FG>)
       -> std::add_lvalue_reference_t<Function<FG>> {
@@ -41,7 +41,7 @@ struct GeneratorTraits final {
       return ThreadSpecificOrGlobal.local();
   }
 
-  template <class FG>
+  template <typename FG>
   auto static GetFunctionForSingleThread(FG &&fg) noexcept(!isGenerator<FG>)
       -> std::conditional_t<isGenerator<FG>, Function<FG>, FG &&> {
     if constexpr (!isGenerator<FG>)

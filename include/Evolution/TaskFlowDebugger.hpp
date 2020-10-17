@@ -6,7 +6,7 @@
 #include <tbb/concurrent_unordered_set.h>
 
 namespace Evolution {
-template <class DNA> class TaskFlowDebugger final {
+template <typename DNA> class TaskFlowDebugger final {
 private:
   using State = StateFlow::State;
   StateFlow stateFlow;

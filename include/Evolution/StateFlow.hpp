@@ -197,8 +197,8 @@ public:
   }
 
   // Tools
-  template <bool IsOppositeDirection = false, class ActFunction,
-            class IsAddChildFunction>
+  template <bool IsOppositeDirection = false, typename ActFunction,
+            typename IsAddChildFunction>
   void DepthFirstSearch(StateSet const &startStates, ActFunction &&Act,
                         IsAddChildFunction &&IsAddChild) const {
     auto visited = StateSet{};
@@ -230,15 +230,15 @@ public:
       }
     }
   }
-  template <bool IsOppositeDirection = false, class ActFunction>
+  template <bool IsOppositeDirection = false, typename ActFunction>
   void DepthFirstSearch(StateSet const &startStates, ActFunction &&Act) const {
     DepthFirstSearch<IsOppositeDirection>(
         startStates, std::forward<ActFunction>(Act),
         [](StateVector const &path, State child) { return true; });
   }
 
-  template <bool IsOppositeDirection = false, class ActFunction,
-            class IsAddChildFunction>
+  template <bool IsOppositeDirection = false, typename ActFunction,
+            typename IsAddChildFunction>
   void BreadthFirstSearch(StateSet const &startStates, ActFunction &&Act,
                           IsAddChildFunction &&IsAddChild) const {
     auto visited = StateSet{};
@@ -260,7 +260,7 @@ public:
       currentGen = std::move(nextGen);
     }
   }
-  template <bool IsOppositeDirection = false, class ActFunction>
+  template <bool IsOppositeDirection = false, typename ActFunction>
   void BreadthFirstSearch(StateSet const &startStates,
                           ActFunction &&Act) const {
     BreadthFirstSearch<IsOppositeDirection>(startStates,
