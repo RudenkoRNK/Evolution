@@ -2,6 +2,7 @@
 #include "Evolution/StateFlow.hpp"
 #include <boost/container/small_vector.hpp>
 #include <cassert>
+#include <mutex>
 #include <tbb/concurrent_unordered_map.h>
 #include <tbb/concurrent_unordered_set.h>
 
@@ -18,6 +19,7 @@ private:
   Poll readPoll;
   tbb::concurrent_unordered_map<State, Addresses> inputAddress;
   tbb::concurrent_unordered_map<State, DNA *> outputAddress;
+  std::mutex dumpMutex;
 
 public:
   enum class NodeType {
@@ -292,6 +294,7 @@ private:
   }
   void DumpStateFlow() {
     // TODO: implement this with collected debug info
+    auto lock = std::lock_guard(dumpMutex);
     auto dump = std::ofstream("dump.dot");
     stateFlow.Print(dump);
     dump.close();
