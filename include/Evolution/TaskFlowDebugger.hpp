@@ -78,9 +78,7 @@ private:
     CheckParentsComputed(dnaPtr, state);
     CheckChildrenNotComputed(dnaPtr, state);
     CheckComputeOrder(dnaPtr, state, nodeType);
-    if (inputAddress.count(state) == 0)
-      inputAddress.emplace(state, Addresses{});
-    inputAddress.at(state).push_back(dnaPtr);
+    inputAddress[state].push_back(dnaPtr);
   }
   void CheckType(DNA *dnaPtr, State state, NodeType nodeType) {
     auto msg = std::string{
@@ -124,8 +122,7 @@ private:
     auto msg = std::string{
         "tbb::flow and StateFlow are out of sync. Found an "
         "attempt to compute states in the wrong order. Faulty operation: "};
-    auto inCnt =
-        inputAddress.count(state) > 0 ? inputAddress.at(state).size() : 0;
+    auto inCnt = GetInputCount(state);
     auto opCnt = stateFlow.IsCrossover(state) ? 2 : 1;
 
     switch (nodeType) {
@@ -197,9 +194,7 @@ private:
                "tbb::flow and StateFlow out of sync. Found state which should "
                "not be computed, but it is");
   }
-  size_t GetInputCount(State state) {
-    return inputAddress.count(state) > 0 ? inputAddress.at(state).size() : 0;
-  }
+  size_t GetInputCount(State state) { return inputAddress[state].size(); }
   size_t GetOutputCount(State state) { return outputAddress.count(state); }
 
   // Methods checking for race conditions

@@ -203,7 +203,7 @@ public:
       std::for_each(std::execution::par_unseq, indices.begin(), indices.end(),
                     [&](auto index) {
                       auto &&Evaluate = GetEvaluateFunction();
-                      gradesPar.emplace(index, Evaluate(population.at(index)));
+                      gradesPar.emplace(index, Evaluate(population[index]));
                     });
       for (auto index : indices)
         grades.push_back(std::move(gradesPar.at(index)));
@@ -685,11 +685,11 @@ private:
 
   void RunTaskFlow(Population &population) {
     assert(population.size() == GetPopulationSize());
+    assert(tbbFlow.inputNodes.size() == tbbFlow.inputIndices.size());
     evaluateBuffer.clear();
 
     for (auto i = size_t{0}; i < tbbFlow.inputNodes.size(); ++i)
-      tbbFlow.inputNodes.at(i).try_put(
-          &population.at(tbbFlow.inputIndices.at(i)));
+      tbbFlow.inputNodes[i].try_put(&population.at(tbbFlow.inputIndices[i]));
     tbbFlow.graphPtr->wait_for_all();
     debugger.Finish();
   }
@@ -703,6 +703,7 @@ private:
     auto idxIt = tbbFlow.nonEvaluateInitialIndices.begin();
     for (auto i = size_t{0}, e = evaluateBuffer.size(); i != e; ++i) {
       auto index = *idxIt;
+      assert(index < population.size());
       auto &&[dnaPtr, grade] = *ebIt;
       population.at(index) = std::move(*dnaPtr);
       grades.at(index) = std::move(grade);
