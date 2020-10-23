@@ -43,14 +43,12 @@ public:
   using OutOperationIteratorRange =
       std::pair<OutOperationIterator, OutOperationIterator>;
   using StateSet = std::unordered_set<State>;
-  using IndexSet = std::unordered_set<size_t>;
   using StateVector = std::vector<State>;
-  using OperationSet = std::unordered_set<Operation>;
 
 private:
   StateGraph G;
   StateSet initialStates;
-  StateSet evaluateStates;
+  size_t nEvaluates = 0;
   size_t nInitialEvaluates = 0;
   size_t nMutates = 0;
   size_t nCrossovers = 0;
@@ -100,7 +98,7 @@ public:
     if (IsEvaluate(state))
       return;
     G[state].isEvaluate = true;
-    evaluateStates.insert(state);
+    ++nEvaluates;
     if (IsInitialState(state))
       ++nInitialEvaluates;
   }
@@ -151,14 +149,13 @@ public:
     return GetSource(GetCrossoverPair(op));
   }
   StateSet const &GetInitialStates() const noexcept { return initialStates; }
-  StateSet const &GetEvaluateStates() const noexcept { return evaluateStates; }
 
   // Counts
   size_t GetOutDegree(State state) const { return boost::out_degree(state, G); }
   size_t GetNStates() const { return boost::num_vertices(G); }
   size_t GetNOperations() const { return boost::num_edges(G); }
   size_t GetNInitialEvaluates() const noexcept { return nInitialEvaluates; }
-  size_t GetNEvaluates() const noexcept { return evaluateStates.size(); }
+  size_t GetNEvaluates() const noexcept { return nEvaluates; }
   size_t GetNMutates() const noexcept { return nMutates; }
   size_t GetNCrossovers() const noexcept { return nCrossovers; }
 
@@ -180,7 +177,6 @@ public:
     return GetIndex(state) != UndefinedIndex;
   }
   bool IsEvaluate(State state) const {
-    assert(evaluateStates.contains(state) == G[state].isEvaluate);
     return G[state].isEvaluate;
   }
   bool IsLeaf(State state) const { return GetOutDegree(state) == 0; }

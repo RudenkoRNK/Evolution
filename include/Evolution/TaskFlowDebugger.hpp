@@ -4,7 +4,6 @@
 #include <cassert>
 #include <mutex>
 #include <tbb/concurrent_unordered_map.h>
-#include <tbb/concurrent_unordered_set.h>
 
 namespace Evolution {
 template <typename DNA> class TaskFlowDebugger final {
@@ -66,8 +65,9 @@ public:
     auto &&[sb, se] = stateFlow.GetStates();
     for (auto si = sb; si != se; ++si)
       CheckComputed(nullptr, *si);
-    for (auto s : stateFlow.GetEvaluateStates())
-      CheckEvaluated(nullptr, s);
+    for (auto si = sb; si != se; ++si)
+      if (stateFlow.IsEvaluate(*si))
+        CheckEvaluated(nullptr, *si);
     CheckWritePollEmpty();
     Clear();
 #endif // !NDEBUG

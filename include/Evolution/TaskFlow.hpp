@@ -113,8 +113,6 @@ private:
   using StateSet = StateFlow::StateSet;
   using StateVector = StateFlow::StateVector;
   using Operation = StateFlow::Operation;
-  using OperationSet = StateFlow::OperationSet;
-  using IndexSet = StateFlow::IndexSet;
 
   using DNAPtr = std::shared_ptr<DNA>;
 
