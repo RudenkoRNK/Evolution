@@ -154,6 +154,7 @@ public:
   size_t GetOutDegree(State state) const { return boost::out_degree(state, G); }
   size_t GetNStates() const { return boost::num_vertices(G); }
   size_t GetNOperations() const { return boost::num_edges(G); }
+  size_t GetNInitials() const noexcept { return GetInitialStates().size(); }
   size_t GetNInitialEvaluates() const noexcept { return nInitialEvaluates; }
   size_t GetNEvaluates() const noexcept { return nEvaluates; }
   size_t GetNMutates() const noexcept { return nMutates; }

@@ -153,7 +153,7 @@ private:
     std::vector<MutateNode> mutateNodes;
     std::vector<CrossoverJoinNode> crossoverJoinNodes;
     std::vector<CrossoverNode> crossoverNodes;
-    std::unordered_set<size_t> nonEvaluateInitialIndices;
+    std::vector<size_t> initialNonEvaluateIndices;
     bool isEvaluateLightweight;
     bool isMutateLightweight;
     bool isCrossoverLightweight;
@@ -161,8 +161,7 @@ private:
   TBBFlow tbbFlow;
   StateFlow stateFlow;
   TaskFlowDebugger<DNA> debugger;
-  tbb::concurrent_unordered_map<DNAPtr, Grade, std::hash<DNAPtr>>
-      evaluateBuffer;
+  tbb::concurrent_vector<std::pair<DNAPtr, Grade>> evaluateBuffer;
   EvaluateTFG evaluateTFG;
   MutateTFG mutateTFG;
   CrossoverTFG crossoverTFG;
@@ -197,14 +196,21 @@ public:
     } else {
       grades.reserve(population.size());
       auto indices = Utility::GetIndices(population.size());
-      auto gradesPar = tbb::concurrent_unordered_map<size_t, Grade>{};
+      auto gradesPar = tbb::concurrent_vector<std::pair<size_t, Grade>>{};
       std::for_each(std::execution::par_unseq, indices.begin(), indices.end(),
                     [&](auto index) {
                       auto &&Evaluate = GetEvaluateFunction();
-                      gradesPar.emplace(index, Evaluate(population[index]));
+                      gradesPar.emplace_back(index,
+                                             Evaluate(population[index]));
                     });
-      for (auto index : indices)
-        grades.push_back(std::move(gradesPar.at(index)));
+      std::sort(gradesPar.begin(), gradesPar.end(),
+                [](auto const &lhs, auto const &rhs) {
+                  return lhs.first < rhs.first;
+                });
+      for (auto const &[index, grade] : gradesPar) {
+        assert(index == grades.size());
+        grades.push_back(grade);
+      }
     }
     return grades;
   }
@@ -248,7 +254,6 @@ public:
   }
 
 private:
-
   EvaluateFunction &GetEvaluateFunction() {
     return GeneratorTraits::GetFunction<EvaluateFG>(evaluateTFG);
   }
@@ -278,7 +283,7 @@ private:
 
     auto &&Evaluate = GetEvaluateFunction();
     auto &&grade = Evaluate(*iSrc);
-    evaluateBuffer.emplace(iSrc, std::move(grade));
+    evaluateBuffer.emplace_back(iSrc, std::move(grade));
   }
   DNAPtr MutateHelper(DNAPtr iSrc, bool isCopy, State state) {
     auto iSrcOrig = iSrc;
@@ -660,20 +665,24 @@ private:
     assert(resolvedStates.size() == stateFlow.GetNStates());
     assert(evaluateCount == stateFlow.GetNEvaluates());
 
-    tbbFlow.nonEvaluateInitialIndices =
-        EvaluateNonEvaluateInitialIndices(stateFlow);
+    tbbFlow.initialNonEvaluateIndices =
+        EvaluateInitialNonEvaluateIndices(stateFlow);
 
     return tbbFlow;
   }
 
-  std::unordered_set<size_t> static EvaluateNonEvaluateInitialIndices(
+  std::vector<size_t> static EvaluateInitialNonEvaluateIndices(
       StateFlow const &stateFlow) {
-    auto availableIndices = std::unordered_set<size_t>{};
-    for (auto i = size_t{0}; i < stateFlow.GetNEvaluates(); ++i)
-      availableIndices.insert(i);
+    auto availableIndices = std::vector<size_t>{};
+    auto unailableIndices = std::unordered_set<size_t>{};
     for (auto state : stateFlow.GetInitialStates())
       if (stateFlow.IsEvaluate(state))
-        availableIndices.erase(stateFlow.GetIndex(state));
+        unailableIndices.insert(stateFlow.GetIndex(state));
+    for (auto i = size_t{0}; i < stateFlow.GetNEvaluates(); ++i)
+      if (!unailableIndices.contains(i))
+        availableIndices.push_back(i);
+    assert(availableIndices.size() ==
+           stateFlow.GetNEvaluates() - stateFlow.GetNInitialEvaluates());
     return availableIndices;
   }
 
@@ -693,20 +702,16 @@ private:
   }
 
   void MoveResultsFromBuffer(Population &population, Grades &grades) noexcept {
-    assert(evaluateBuffer.size() == tbbFlow.nonEvaluateInitialIndices.size());
+    assert(evaluateBuffer.size() == tbbFlow.initialNonEvaluateIndices.size());
     assert(population.size() == GetPopulationSize());
     assert(grades.size() == GetPopulationSize());
 
-    auto ebIt = evaluateBuffer.begin();
-    auto idxIt = tbbFlow.nonEvaluateInitialIndices.begin();
     for (auto i = size_t{0}, e = evaluateBuffer.size(); i != e; ++i) {
-      auto index = *idxIt;
+      auto index = tbbFlow.initialNonEvaluateIndices[i];
       assert(index < population.size());
-      auto &&[dnaPtr, grade] = *ebIt;
+      auto &&[dnaPtr, grade] = evaluateBuffer[i];
       population.at(index) = std::move(*dnaPtr);
       grades.at(index) = std::move(grade);
-      ++ebIt;
-      ++idxIt;
     }
   }
 
@@ -735,7 +740,6 @@ private:
     auto clocks = freq * nanosecs;
     return clocks < maxLightweightClocks;
   }
-
 };
 
 } // namespace Evolution

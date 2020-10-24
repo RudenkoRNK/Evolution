@@ -9,16 +9,18 @@ namespace Evolution {
 template <typename DNA> class TaskFlowDebugger final {
 private:
   using State = StateFlow::State;
-  StateFlow stateFlow;
-
   using Addresses = boost::container::small_vector<DNA *, 3>;
   using Poll =
       tbb::concurrent_unordered_map<DNA *, std::atomic_int, std::hash<DNA *>>;
+
+#ifndef NDEBUG
+  StateFlow stateFlow;
   Poll writePoll;
   Poll readPoll;
   tbb::concurrent_unordered_map<State, Addresses> inputAddress;
   tbb::concurrent_unordered_map<State, DNA *> outputAddress;
   std::mutex dumpMutex;
+#endif // !NDEBUG
 
 public:
   enum class NodeType {
@@ -74,6 +76,7 @@ public:
   }
 
 private:
+#ifndef NDEBUG
   // Methods checking for tbb::flow and StateFlow synchronization
   void RegisterState(DNA *dnaPtr, State state, NodeType nodeType) {
     CheckType(dnaPtr, state, nodeType);
@@ -306,6 +309,7 @@ private:
     inputAddress.clear();
     outputAddress.clear();
   }
+#endif // !NDEBUG
 };
 
 } // namespace Evolution
