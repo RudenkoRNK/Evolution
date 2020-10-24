@@ -7,7 +7,7 @@ add_library(Evolution INTERFACE)
 find_package(Boost REQUIRED)
 find_package(TBB REQUIRED)
 
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/external/Utility)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/Utility)
 
 target_link_libraries(Evolution INTERFACE ${Boost_LIBRARIES})
 target_link_libraries(Evolution INTERFACE ${TBB_IMPORTED_TARGETS})
