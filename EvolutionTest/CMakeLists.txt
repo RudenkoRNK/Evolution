@@ -17,3 +17,7 @@ file(GLOB EvolutionTestSources
 
 target_sources(EvolutionTest PRIVATE ${EvolutionSources})
 target_sources(EvolutionTest PRIVATE ${EvolutionTestSources})
+
+if (MSVC)
+  target_compile_options(EvolutionTest PRIVATE "/bigobj")
+endif()
