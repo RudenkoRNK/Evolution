@@ -24,5 +24,5 @@ file(GLOB EvolutionSources
 
 option(EVOLUTION_TEST "Build Evolution tests" OFF)
 if (EVOLUTION_TEST)
-  add_subdirectory(test)
+  add_subdirectory(EvolutionTest)
 endif ()
