@@ -678,7 +678,7 @@ private:
     for (auto state : stateFlow.GetInitialStates())
       if (stateFlow.IsEvaluate(state))
         unailableIndices.insert(stateFlow.GetIndex(state));
-    for (auto i = size_t{0}; i < stateFlow.GetNEvaluates(); ++i)
+    for (auto i = size_t{0}; i != stateFlow.GetNEvaluates(); ++i)
       if (!unailableIndices.contains(i))
         availableIndices.push_back(i);
     assert(availableIndices.size() ==
@@ -695,7 +695,7 @@ private:
     assert(tbbFlow.inputNodes.size() == tbbFlow.inputIndices.size());
     evaluateBuffer.clear();
 
-    for (auto i = size_t{0}; i < tbbFlow.inputNodes.size(); ++i)
+    for (auto i = size_t{0}; i != tbbFlow.inputNodes.size(); ++i)
       tbbFlow.inputNodes[i].try_put(&population.at(tbbFlow.inputIndices[i]));
     tbbFlow.graphPtr->wait_for_all();
     debugger.Finish();

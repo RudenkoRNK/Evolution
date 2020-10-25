@@ -39,31 +39,31 @@ StateFlow static GenerateStateFlow(size_t populationSize) {
   assert(nCrossovers3 * 2 <= populationSize);
 
   auto sf = StateFlow{};
-  for (auto i = size_t{0}; i < nSaves; ++i)
+  for (auto i = size_t{0}; i != nSaves; ++i)
     sf.SetEvaluate(sf.GetOrAddInitialState(i));
-  for (auto i = size_t{0}; i < nMutates; ++i)
+  for (auto i = size_t{0}; i != nMutates; ++i)
     sf.SetEvaluate(sf.AddMutate(sf.GetOrAddInitialState(i)));
-  for (auto i = size_t{0}; i < nCrossovers0; ++i) {
+  for (auto i = size_t{0}; i != nCrossovers0; ++i) {
     auto j = 2 * nCrossovers0 - i - 1;
     sf.SetEvaluate(sf.AddCrossover(sf.GetOrAddInitialState(i),
                                    sf.GetOrAddInitialState(j)));
   }
-  for (auto i = nCrossovers1; i < nCrossovers1 * 2; ++i) {
+  for (auto i = nCrossovers1; i != nCrossovers1 * 2; ++i) {
     auto j = 3 * nCrossovers1 - (i - nCrossovers1) - 1;
     sf.SetEvaluate(sf.AddCrossover(sf.GetOrAddInitialState(i),
                                    sf.GetOrAddInitialState(j)));
   }
-  for (auto i = size_t{0}; i < nCrossovers2; ++i) {
+  for (auto i = size_t{0}; i != nCrossovers2; ++i) {
     auto j = 2 * nCrossovers2 - i - 1;
     sf.SetEvaluate(sf.AddCrossover(sf.GetOrAddInitialState(i),
                                    sf.GetOrAddInitialState(j)));
   }
-  for (auto i = size_t{0}; i < nCrossovers3; ++i) {
+  for (auto i = size_t{0}; i != nCrossovers3; ++i) {
     auto j = 2 * nCrossovers3 - i - 1;
     sf.SetEvaluate(sf.AddCrossover(sf.GetOrAddInitialState(i),
                                    sf.GetOrAddInitialState(j)));
   }
-  for (auto i = size_t{0}; i < nCrossovers4; ++i) {
+  for (auto i = size_t{0}; i != nCrossovers4; ++i) {
     auto j = (populationSize - populationSize / 10) - i - 1;
     if (i == j)
       j--;

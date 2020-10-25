@@ -70,11 +70,11 @@ BOOST_AUTO_TEST_CASE(quadratic_equation) {
   auto env = Evolution::Environment(Generator, Evaluate, MutateGen, Crossover,
                                     sf, true);
 
-  for (auto i = size_t{0}; i < 500; ++i)
+  for (auto i = size_t{0}; i != 500; ++i)
     env.Run();
 
   auto sf2 = Evolution::StateFlow{};
-  for (auto i = size_t{0}; i < N; ++i)
+  for (auto i = size_t{0}; i != N; ++i)
     sf2.SetEvaluate(sf2.GetOrAddInitialState(i));
   env.SetStateFlow(std::move(sf2));
   env.Run();
@@ -98,7 +98,7 @@ BOOST_AUTO_TEST_CASE(quadratic_equation) {
                                     return 0.0;
                                   return x2 - x1;
                                 });
-      for (auto i = size_t{0}; i < g2.size(); ++i)
+      for (auto i = size_t{0}; i != g2.size(); ++i)
         if (g2.at(i) > best.at(i))
           best.at(i) = g2.at(i);
       ++nGens;
@@ -256,7 +256,7 @@ BOOST_AUTO_TEST_CASE(random_flow_test) {
     auto sf = Evolution::StateFlow{};
     sf.GetOrAddInitialState(++nextInd);
     sf.GetOrAddInitialState(++nextInd);
-    for (auto i = 0; i < 1000; ++i) {
+    for (auto i = 0; i != 1000; ++i) {
       auto dice = rand(gen);
       if (dice % 10 == 0)
         AddInitial(sf);
@@ -265,7 +265,7 @@ BOOST_AUTO_TEST_CASE(random_flow_test) {
       else
         AddCrossover(sf);
     };
-    for (auto i = 0; i < 200; ++i)
+    for (auto i = 0; i != 200; ++i)
       AddEvaluate(sf);
     AddEvaluateOnLeaves(sf);
     auto nEvs = int(sf.GetNEvaluates());
@@ -279,7 +279,7 @@ BOOST_AUTO_TEST_CASE(random_flow_test) {
 
   auto env = Evolution::Environment(Generator, Evaluate, Mutate, Crossover,
                                     SFGen(), true);
-  for (auto i = 0; i < 10; ++i) {
+  for (auto i = 0; i != 10; ++i) {
     env.RegeneratePopulation();
     env.SetStateFlow(Evolution::StateFlow(SFGen()));
     env.Run(size_t{5});
