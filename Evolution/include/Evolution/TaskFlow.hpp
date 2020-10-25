@@ -216,7 +216,6 @@ public:
   }
 
   void SetStateFlow(StateFlow &&stateFlow) {
-    debugger.SetStateFlow(stateFlow);
     auto tbbFlow_ = GenerateTBBFlow(stateFlow, tbbFlow.isEvaluateLightweight,
                                     tbbFlow.isMutateLightweight,
                                     tbbFlow.isCrossoverLightweight);
@@ -226,6 +225,7 @@ public:
     tbbFlow.crossoverJoinNodes.clear();
     tbbFlow.crossoverNodes.clear();
     tbbFlow = std::move(tbbFlow_);
+    debugger.SetStateFlow(stateFlow);
     this->stateFlow = std::move(stateFlow);
   }
 
@@ -512,7 +512,10 @@ private:
   TBBFlow GenerateTBBFlow(StateFlow const &stateFlow,
                           bool isEvaluateLightweight, bool isMutateLightweight,
                           bool isCrossoverLightweight) {
-    assert(!stateFlow.IsNotReady());
+    auto isNotReady = stateFlow.IsNotReady();
+    if (isNotReady)
+      throw std::invalid_argument("Provided stateflow is not ready. " +
+                                  isNotReady.value());
     using InputNodeRef = std::reference_wrapper<InputNode>;
     using MutateNodeRef = std::reference_wrapper<MutateNode>;
     using CrossoverNodeRef = std::reference_wrapper<CrossoverNode>;

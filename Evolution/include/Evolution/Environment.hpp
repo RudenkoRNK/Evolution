@@ -72,8 +72,9 @@ public:
 
   // Also can be used to provide DNA examples
   void SetPopulation(Population &&population) {
-    assert(population.size() <= GetPopulation().size() &&
-           "For setting larger population, first extend stateFlow");
+    if (population.size() > GetPopulation().size())
+      throw std::length_error(
+          "For setting larger population, first extend stateFlow");
     AppendPopulation(std::move(population), population.size());
   }
 
