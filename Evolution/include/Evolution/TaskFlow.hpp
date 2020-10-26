@@ -24,9 +24,8 @@ class TaskFlow final {
 
 private:
   using TypeTraits = Utility::TypeTraits;
-  using GeneratorTraits = Utility::GeneratorTraits;
   template <typename Callable>
-  using ArgumentTraits = Utility::ArgumentTraits<Callable>;
+  using CallableTraits = Utility::CallableTraits<Callable>;
 
   using EvaluateFunction = typename GeneratorTraits::Function<EvaluateFG>;
   using MutateFunction = typename GeneratorTraits::Function<MutateFG>;
@@ -34,14 +33,14 @@ private:
 
   template <typename T>
   bool constexpr static isVariant =
-      TypeTraits::isInstanceOf<std::remove_reference_t<T>, std::variant>;
+      TypeTraits::isInstanceOf<std::variant, std::remove_reference_t<T>>;
 
 public:
   using DNA = std::remove_cvref_t<
-      typename ArgumentTraits<EvaluateFunction>::template Type<1>>;
+      typename CallableTraits<EvaluateFunction>::template ArgType<0>>;
   using Population = std::vector<DNA>;
 
-  using Grade = typename ArgumentTraits<EvaluateFunction>::template Type<0>;
+  using Grade = typename CallableTraits<EvaluateFunction>::ReturnType;
   using Grades = std::vector<Grade>;
 
 private:
@@ -62,52 +61,52 @@ private:
   static_assert(std::is_move_assignable_v<Grade>);
 
   // Check that arguments and return values of functions are of type DNA
-  static_assert(std::is_same_v<DNA, std::remove_cvref_t<typename ArgumentTraits<
-                                        EvaluateFunction>::template Type<1>>>);
-  static_assert(std::is_same_v<DNA, std::remove_cvref_t<typename ArgumentTraits<
-                                        MutateFunction>::template Type<0>>>);
-  static_assert(std::is_same_v<DNA, std::remove_cvref_t<typename ArgumentTraits<
-                                        MutateFunction>::template Type<1>>>);
-  static_assert(std::is_same_v<DNA, std::remove_cvref_t<typename ArgumentTraits<
-                                        CrossoverFunction>::template Type<0>>>);
-  static_assert(std::is_same_v<DNA, std::remove_cvref_t<typename ArgumentTraits<
-                                        CrossoverFunction>::template Type<1>>>);
-  static_assert(std::is_same_v<DNA, std::remove_cvref_t<typename ArgumentTraits<
-                                        CrossoverFunction>::template Type<2>>>);
+  static_assert(std::is_same_v<DNA, std::remove_cvref_t<typename CallableTraits<
+                                        EvaluateFunction>::ArgType<0>>>);
+  static_assert(std::is_same_v<DNA, std::remove_cvref_t<typename CallableTraits<
+                                        MutateFunction>::ReturnType>>);
+  static_assert(std::is_same_v<DNA, std::remove_cvref_t<typename CallableTraits<
+                                        MutateFunction>::ArgType<0>>>);
+  static_assert(std::is_same_v<DNA, std::remove_cvref_t<typename CallableTraits<
+                                        CrossoverFunction>::ReturnType>>);
+  static_assert(std::is_same_v<DNA, std::remove_cvref_t<typename CallableTraits<
+                                        CrossoverFunction>::ArgType<0>>>);
+  static_assert(std::is_same_v<DNA, std::remove_cvref_t<typename CallableTraits<
+                                        CrossoverFunction>::ArgType<1>>>);
 
   // Evaluate function must not modify its argument
-  static_assert(ArgumentTraits<EvaluateFunction>::template isConst<1> ||
-                ArgumentTraits<EvaluateFunction>::template isValue<1>);
+  static_assert(CallableTraits<EvaluateFunction>::template isConst<1> ||
+                CallableTraits<EvaluateFunction>::template isValue<1>);
 
   // Const qualifier can appear only with r-value reference
-  static_assert(ArgumentTraits<MutateFunction>::template isLValueReference<1> ||
-                !ArgumentTraits<MutateFunction>::template isConst<1>);
+  static_assert(CallableTraits<MutateFunction>::template isLValueReference<1> ||
+                !CallableTraits<MutateFunction>::template isConst<1>);
   static_assert(
-      ArgumentTraits<CrossoverFunction>::template isLValueReference<1> ||
-      !ArgumentTraits<CrossoverFunction>::template isConst<1>);
+      CallableTraits<CrossoverFunction>::template isLValueReference<1> ||
+      !CallableTraits<CrossoverFunction>::template isConst<1>);
   static_assert(
-      ArgumentTraits<CrossoverFunction>::template isLValueReference<2> ||
-      !ArgumentTraits<CrossoverFunction>::template isConst<2>);
+      CallableTraits<CrossoverFunction>::template isLValueReference<2> ||
+      !CallableTraits<CrossoverFunction>::template isConst<2>);
 
   // Mutate and crossover must not return constant values
-  static_assert(!ArgumentTraits<MutateFunction>::template isConst<0>);
-  static_assert(!ArgumentTraits<CrossoverFunction>::template isConst<0>);
+  static_assert(!CallableTraits<MutateFunction>::template isConst<0>);
+  static_assert(!CallableTraits<CrossoverFunction>::template isConst<0>);
 
   auto constexpr static isMutateInPlace =
-      (!ArgumentTraits<MutateFunction>::template isConst<1>);
+      (!CallableTraits<MutateFunction>::template isConst<1>);
   auto constexpr static isMutateMovable =
-      ArgumentTraits<MutateFunction>::template isRValueReference<1> ||
-      ArgumentTraits<MutateFunction>::template isValue<1>;
+      CallableTraits<MutateFunction>::template isRValueReference<1> ||
+      CallableTraits<MutateFunction>::template isValue<1>;
   auto constexpr static isCrossoverInPlaceFirst =
-      !ArgumentTraits<CrossoverFunction>::template isConst<1>;
+      !CallableTraits<CrossoverFunction>::template isConst<1>;
   auto constexpr static isCrossoverInPlaceSecond =
-      !ArgumentTraits<CrossoverFunction>::template isConst<2>;
+      !CallableTraits<CrossoverFunction>::template isConst<2>;
   auto constexpr static isCrossoverMovableFirst =
-      ArgumentTraits<CrossoverFunction>::template isRValueReference<1> ||
-      ArgumentTraits<CrossoverFunction>::template isValue<1>;
+      CallableTraits<CrossoverFunction>::template isRValueReference<1> ||
+      CallableTraits<CrossoverFunction>::template isValue<1>;
   auto constexpr static isCrossoverMovableSecond =
-      ArgumentTraits<CrossoverFunction>::template isRValueReference<2> ||
-      ArgumentTraits<CrossoverFunction>::template isValue<2>;
+      CallableTraits<CrossoverFunction>::template isRValueReference<2> ||
+      CallableTraits<CrossoverFunction>::template isValue<2>;
 
   using State = StateFlow::State;
   using StateSet = StateFlow::StateSet;
@@ -136,11 +135,10 @@ private:
       FunctionNode<std::tuple<DNAPtr, DNAPtr>, DNAPtr, tbb::flow::lightweight>>;
   using CrossoverJoinNode = tbb::flow::join_node<std::tuple<DNAPtr, DNAPtr>>;
   using EvaluateTFG =
-      typename GeneratorTraits::ThreadGeneratorOrFunction<EvaluateFG>;
-  using MutateTFG =
-      typename GeneratorTraits::ThreadGeneratorOrFunction<MutateFG>;
+      typename GeneratorTraits::TBBGeneratorOrFunction<EvaluateFG>;
+  using MutateTFG = typename GeneratorTraits::TBBGeneratorOrFunction<MutateFG>;
   using CrossoverTFG =
-      typename GeneratorTraits::ThreadGeneratorOrFunction<CrossoverFG>;
+      typename GeneratorTraits::TBBGeneratorOrFunction<CrossoverFG>;
 
   using NodeType = typename TaskFlowDebugger<DNA>::NodeType;
 
@@ -174,10 +172,9 @@ public:
       : tbbFlow(GenerateTBBFlow(stateFlow, isEvaluateLightweight,
                                 isMutateLightweight, isCrossoverLightweight)),
         stateFlow(stateFlow), debugger(stateFlow),
-        evaluateTFG(GeneratorTraits::GetThreadGeneratorOrFunction(Evaluate)),
-        mutateTFG(GeneratorTraits::GetThreadGeneratorOrFunction(Mutate)),
-        crossoverTFG(GeneratorTraits::GetThreadGeneratorOrFunction(Crossover)) {
-  }
+        evaluateTFG(GeneratorTraits::WrapGeneratorOrFunction(Evaluate)),
+        mutateTFG(GeneratorTraits::WrapGeneratorOrFunction(Mutate)),
+        crossoverTFG(GeneratorTraits::WrapGeneratorOrFunction(Crossover)) {}
 
   void Run(Population &population, Grades &grades) {
     RunTaskFlow(population);
@@ -734,8 +731,8 @@ private:
   template <typename FG, typename... Args>
   bool static IsFGLightweight(FG const &Func, Args &&... args) {
     auto constexpr static maxLightweightClocks = size_t{1000000};
-    auto &&Func_ =
-        GeneratorTraits::GetFunctionForSingleThread<decltype(Func)>(Func);
+    auto FG_ = std::function(Func);
+    auto &&Func_ = GeneratorTraits::GetFunction<decltype(Func)>(FG_);
     auto freq = 2; // clocks per nanosecond
     auto time = Utility::Benchmark(std::forward<decltype(Func_)>(Func_),
                                    std::forward<Args>(args)...);
