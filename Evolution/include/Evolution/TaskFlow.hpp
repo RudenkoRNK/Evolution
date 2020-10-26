@@ -194,9 +194,10 @@ public:
                        return Evaluate(dna);
                      });
     } else {
-      grades.reserve(population.size());
-      auto indices = Utility::GetIndices(population.size());
       auto gradesPar = tbb::concurrent_vector<std::pair<size_t, Grade>>{};
+      grades.reserve(population.size());
+      gradesPar.reserve(population.size());
+      auto indices = Utility::GetIndices(population.size());
       std::for_each(std::execution::par_unseq, indices.begin(), indices.end(),
                     [&](auto index) {
                       auto &&Evaluate = GetEvaluateFunction();
