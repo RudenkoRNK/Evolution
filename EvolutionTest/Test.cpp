@@ -75,6 +75,13 @@ BOOST_AUTO_TEST_CASE(empty_sf_test) {
   BOOST_TEST(cnt == 0);
 }
 
+BOOST_AUTO_TEST_CASE(sf_generator_test) {
+  for (auto i = size_t{0}; i < size_t{100}; ++i) {
+    auto sf = Evolution::GenerateStateFlow(i);
+    BOOST_TEST(!sf.IsNotReady());
+  }
+}
+
 int Evaluate11(int x) { return x; }
 
 BOOST_AUTO_TEST_CASE(env_ctor_test) {

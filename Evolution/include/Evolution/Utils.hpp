@@ -5,6 +5,13 @@
 namespace Evolution {
 
 StateFlow static GenerateStateFlow(size_t populationSize) {
+  if (populationSize == 0)
+    return StateFlow{};
+  if (populationSize == 1) {
+    auto sf = StateFlow{};
+    sf.SetEvaluate(sf.GetOrAddInitialState(0));
+    return sf;
+  }
   // Save top 10%
   // mutate once top 30%,
   // Crossover top 5% with next-top 5%
@@ -12,7 +19,6 @@ StateFlow static GenerateStateFlow(size_t populationSize) {
   // Crossover top 10% with next-top 10%
   // Crossover top 20% with next-top 20%
   // Crossover top 20% with (70-90)% range
-  assert(populationSize >= 2);
   auto nLeft = populationSize;
   auto percentsLeft = size_t{100};
   auto GetAbsValue = [&](size_t percentage) -> size_t {
