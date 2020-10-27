@@ -56,7 +56,7 @@ private:
 
 public:
   template <typename FG>
-  auto static WrapGeneratorOrFunction(FG &&fg)
+  auto static WrapFunctionOrGenerator(FG &&fg)
       -> std::conditional_t<isGenerator<FG> || !is_std_function<FG>,
                             TBBGeneratorOrFunction<FG>, FG &&> {
     if constexpr (!isGenerator<FG>)

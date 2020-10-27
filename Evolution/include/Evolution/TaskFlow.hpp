@@ -172,9 +172,9 @@ public:
       : tbbFlow(GenerateTBBFlow(stateFlow, isEvaluateLightweight,
                                 isMutateLightweight, isCrossoverLightweight)),
         stateFlow(stateFlow), debugger(stateFlow),
-        evaluateTFG(GeneratorTraits::WrapGeneratorOrFunction(Evaluate)),
-        mutateTFG(GeneratorTraits::WrapGeneratorOrFunction(Mutate)),
-        crossoverTFG(GeneratorTraits::WrapGeneratorOrFunction(Crossover)) {}
+        evaluateTFG(GeneratorTraits::WrapFunctionOrGenerator(Evaluate)),
+        mutateTFG(GeneratorTraits::WrapFunctionOrGenerator(Mutate)),
+        crossoverTFG(GeneratorTraits::WrapFunctionOrGenerator(Crossover)) {}
 
   void Run(Population &population, Grades &grades) {
     RunTaskFlow(population);
