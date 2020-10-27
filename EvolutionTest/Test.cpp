@@ -44,6 +44,65 @@ BOOST_AUTO_TEST_CASE(second_test) {
   BOOST_TEST(grades.at(1) == 3);
 }
 
+int Evaluate11(int x) { return x; }
+
+BOOST_AUTO_TEST_CASE(env_ctor_test) {
+  auto sf = Evolution::GenerateStateFlow(2);
+
+  auto a = 1;
+  auto Evaluate1 = [](int x) { return x; };
+  auto Evaluate2 = [&](int x) { return a; };
+  auto Evaluate3 = [a](int x) { return a; };
+  auto Evaluate4 = [a](int x) mutable {
+    return a++ /*not thread safe but does not matter*/;
+  };
+  auto Evaluate5 = std::function(Evaluate1);
+  auto Evaluate6 = std::function(Evaluate2);
+  auto Evaluate7 = std::function(Evaluate3);
+  auto Evaluate8 = std::function(Evaluate4);
+  struct Evaluate9T {
+    int operator()(int x) { return x; }
+  };
+  struct Evaluate10T {
+    int operator()(int x) const { return x; }
+  };
+  auto Evaluate9 = Evaluate9T{};
+  auto Evaluate10 = Evaluate10T{};
+  auto Evaluate12 = []() {
+    auto gen = std::mt19937(0);
+    auto rand = std::uniform_real_distribution<>();
+    return
+        [gen, rand](int x) mutable { return static_cast<int>(rand(gen) * 10); };
+  };
+  auto Evaluate13 = []() {
+    return [](int x) { return x; }; };
+  auto Evaluate14 = []() { return Evaluate9T{}; };
+  auto Evaluate15 = []() { return Evaluate10T{}; };
+
+
+  auto Mutate = [](int x) { return x + 1; };
+  auto Crossover = [](int x, int y) { return x + y; };
+  auto generator = []() -> int { return 1; };
+
+  Evolution::Environment(generator, Evaluate1, Mutate, Crossover, sf, true);
+  Evolution::Environment(generator, Evaluate2, Mutate, Crossover, sf, true);
+  Evolution::Environment(generator, Evaluate3, Mutate, Crossover, sf, true);
+  Evolution::Environment(generator, Evaluate4, Mutate, Crossover, sf, true);
+  Evolution::Environment(generator, Evaluate5, Mutate, Crossover, sf, true);
+  Evolution::Environment(generator, Evaluate6, Mutate, Crossover, sf, true);
+  Evolution::Environment(generator, Evaluate7, Mutate, Crossover, sf, true);
+  Evolution::Environment(generator, Evaluate8, Mutate, Crossover, sf, true);
+  Evolution::Environment(generator, Evaluate9, Mutate, Crossover, sf, true);
+  Evolution::Environment(generator, Evaluate10, Mutate, Crossover, sf, true);
+#pragma warning(disable : 4180)
+  Evolution::Environment(generator, Evaluate11, Mutate, Crossover, sf, true);
+#pragma warning(default : 4180)
+  Evolution::Environment(generator, Evaluate12, Mutate, Crossover, sf, true);
+  Evolution::Environment(generator, Evaluate13, Mutate, Crossover, sf, true);
+  Evolution::Environment(generator, Evaluate14, Mutate, Crossover, sf, true);
+  Evolution::Environment(generator, Evaluate15, Mutate, Crossover, sf, true);
+}
+
 BOOST_AUTO_TEST_CASE(quadratic_equation) {
   // Try to solve quadratic equation with guessing
   // x^2 + bx + c = 0
