@@ -47,22 +47,12 @@ public:
 
 private:
   StateGraph G;
-  StateSet initialStates;
+  StateVector initialStates;
   size_t nEvaluates = 0;
   size_t nInitialEvaluates = 0;
   size_t nMutates = 0;
   size_t nCrossovers = 0;
-  State maxIndexState;
   bool isSwapArgumentsAllowedInCrossover = false;
-
-  template <bool IsOppositeDirection>
-  auto GetChildStatesDir(State state) const {
-    if constexpr (IsOppositeDirection) {
-      return boost::inv_adjacent_vertices(state, G);
-    } else {
-      return GetChildStates(state);
-    }
-  }
 
 public:
   // Construction
@@ -74,10 +64,7 @@ public:
     if (s != inits.end())
       return *s;
     auto state = boost::add_vertex({.index = index}, G);
-    initialStates.insert(state);
-    if (initialStates.size() == 0)
-      maxIndexState = state;
-    maxIndexState = GetIndex(maxIndexState) > index ? maxIndexState : state;
+    initialStates.push_back(state);
     return state;
   }
   State AddMutate(State state) {
@@ -148,7 +135,7 @@ public:
     assert(presence);
     return GetSource(GetCrossoverPair(op));
   }
-  StateSet const &GetInitialStates() const noexcept { return initialStates; }
+  StateVector const &GetInitialStates() const noexcept { return initialStates; }
 
   // Counts
   size_t GetOutDegree(State state) const { return boost::out_degree(state, G); }
@@ -172,14 +159,12 @@ public:
     return boost::in_degree(state, G) == 2;
   }
   bool IsInitialState(State state) const {
-    return GetInitialStates().contains(state);
+    return boost::in_degree(state, G) == 0;
   }
   bool IsIndexSet(State state) const {
     return GetIndex(state) != UndefinedIndex;
   }
-  bool IsEvaluate(State state) const {
-    return G[state].isEvaluate;
-  }
+  bool IsEvaluate(State state) const { return G[state].isEvaluate; }
   bool IsLeaf(State state) const { return GetOutDegree(state) == 0; }
   bool IsSwapArgumentsAllowedInCrossover() const noexcept {
     return isSwapArgumentsAllowedInCrossover;
@@ -188,19 +173,13 @@ public:
     auto index = G[state].index;
     return index;
   }
-  State GetMaxIndexState() const noexcept {
-    assert(GetNStates() > 0);
-    return maxIndexState;
-  }
 
   // Tools
-  template <bool IsOppositeDirection = false, typename ActFunction,
-            typename IsAddChildFunction>
-  void DepthFirstSearch(StateSet const &startStates, ActFunction &&Act,
+  template <typename States, typename ActFunction, typename IsAddChildFunction>
+  void DepthFirstSearch(States const &startStates, ActFunction &&Act,
                         IsAddChildFunction &&IsAddChild) const {
     auto visited = StateSet{};
     auto currentPath = StateVector{};
-
     for (auto start : startStates) {
       if (visited.contains(start))
         continue;
@@ -211,8 +190,7 @@ public:
 
         auto isNextFound = false;
         while (!isNextFound && currentPath.size() > 0) {
-          auto const &[nextsB, nextsE] =
-              GetChildStatesDir<IsOppositeDirection>(currentPath.back());
+          auto const &[nextsB, nextsE] = GetChildStates(currentPath.back());
           auto const &next = std::find_if(nextsB, nextsE, [&](auto state) {
             return !visited.contains(state) &&
                    IsAddChild(std::as_const(currentPath), std::as_const(state));
@@ -227,27 +205,24 @@ public:
       }
     }
   }
-  template <bool IsOppositeDirection = false, typename ActFunction>
-  void DepthFirstSearch(StateSet const &startStates, ActFunction &&Act) const {
-    DepthFirstSearch<IsOppositeDirection>(
-        startStates, std::forward<ActFunction>(Act),
-        [](StateVector const &path, State child) { return true; });
+  template <typename States, typename ActFunction>
+  void DepthFirstSearch(States const &startStates, ActFunction &&Act) const {
+    DepthFirstSearch(startStates, std::forward<ActFunction>(Act),
+                     [](StateVector const &path, State child) { return true; });
   }
 
-  template <bool IsOppositeDirection = false, typename ActFunction,
-            typename IsAddChildFunction>
-  void BreadthFirstSearch(StateSet const &startStates, ActFunction &&Act,
+  template <typename States, typename ActFunction, typename IsAddChildFunction>
+  void BreadthFirstSearch(States const &startStates, ActFunction &&Act,
                           IsAddChildFunction &&IsAddChild) const {
     auto visited = StateSet{};
-    auto currentGen = startStates;
+    auto currentGen = StateSet(startStates.begin(), startStates.end());
     while (currentGen.size() > 0) {
       auto nextGen = StateSet{};
       for (auto state : currentGen) {
         Act(state);
         visited.insert(state);
 
-        auto const &[nextsB, nextsE] =
-            GetChildStatesDir<IsOppositeDirection>(state);
+        auto const &[nextsB, nextsE] = GetChildStates(state);
         for (auto nextI = nextsB; nextI != nextsE; ++nextI) {
           if (visited.contains(*nextI) || !IsAddChild(*nextI))
             continue;
@@ -257,12 +232,10 @@ public:
       currentGen = std::move(nextGen);
     }
   }
-  template <bool IsOppositeDirection = false, typename ActFunction>
-  void BreadthFirstSearch(StateSet const &startStates,
-                          ActFunction &&Act) const {
-    BreadthFirstSearch<IsOppositeDirection>(startStates,
-                                            std::forward<ActFunction>(Act),
-                                            [](State child) { return true; });
+  template <typename States, typename ActFunction>
+  void BreadthFirstSearch(States const &startStates, ActFunction &&Act) const {
+    BreadthFirstSearch(startStates, std::forward<ActFunction>(Act),
+                       [](State child) { return true; });
   }
 
   // Debug & Verification
@@ -283,20 +256,24 @@ public:
   std::optional<std::string> IsNotReady() const {
     // The function defines whether this stateFlow can be used in TaskFlow
     auto nEvaluates = GetNEvaluates();
-    if (GetNStates() == 0)
-      return "Number of states must be nonzero.";
-    if (GetInitialStates().size() > nEvaluates)
+    auto nInitials = GetNInitials();
+    if (nInitials == 0)
+      return {};
+    if (nInitials > nEvaluates)
       return "Number of evaluates must be greater or equal than number of "
              "initial states. Number of evaluates: " +
-             std::to_string(nEvaluates) + ". Number of initial states: " +
-             std::to_string(GetInitialStates().size()) + ".";
-    if (GetIndex(GetMaxIndexState()) >= nEvaluates)
+             std::to_string(nEvaluates) +
+             ". Number of initial states: " + std::to_string(nInitials) + ".";
+    auto maxState = *std::max_element(
+        initialStates.begin(), initialStates.end(),
+        [&](auto s1, auto s2) { return GetIndex(s1) < GetIndex(s2); });
+    if (GetIndex(maxState) >= nEvaluates)
       return "Number of evaluates must be greater than max index. Number of "
              "evaluates: " +
              std::to_string(nEvaluates) +
              ". Maximum index among initial states: " +
-             std::to_string(GetIndex(GetMaxIndexState())) +
-             ". Faulty state: " + std::to_string(GetMaxIndexState()) + ".";
+             std::to_string(GetIndex(maxState)) +
+             ". Faulty state: " + std::to_string(maxState) + ".";
     if (auto state = FindUnevaluatedLeaf())
       return "All leaf states must be evaluated. Unevaluated state: " +
              std::to_string(state.value()) + ".";

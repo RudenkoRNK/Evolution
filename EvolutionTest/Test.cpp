@@ -44,6 +44,37 @@ BOOST_AUTO_TEST_CASE(second_test) {
   BOOST_TEST(grades.at(1) == 3);
 }
 
+BOOST_AUTO_TEST_CASE(empty_sf_test) {
+  auto cnt = std::atomic_int{0};
+  auto Evaluate = [&](int x) {
+    ++cnt;
+    return x;
+  };
+  auto Mutate = [&](int x) {
+    ++cnt;
+    return x + 1;
+  };
+  auto Crossover = [&](int x, int y) {
+    ++cnt;
+    return x + y;
+  };
+  auto generator = [&]() -> int {
+    ++cnt;
+    return 1;
+  };
+  auto sf = Evolution::StateFlow{};
+  BOOST_TEST(!sf.IsNotReady());
+  auto env =
+      Evolution::Environment(generator, Evaluate, Mutate, Crossover, sf, true);
+  env.Run(size_t{10});
+  BOOST_TEST(cnt <= 7);
+  cnt = 0;
+  auto env2 =
+      Evolution::Environment(generator, Evaluate, Mutate, Crossover, sf, false);
+  env2.Run(size_t{10});
+  BOOST_TEST(cnt == 0);
+}
+
 int Evaluate11(int x) { return x; }
 
 BOOST_AUTO_TEST_CASE(env_ctor_test) {
@@ -74,11 +105,9 @@ BOOST_AUTO_TEST_CASE(env_ctor_test) {
     return
         [gen, rand](int x) mutable { return static_cast<int>(rand(gen) * 10); };
   };
-  auto Evaluate13 = []() {
-    return [](int x) { return x; }; };
+  auto Evaluate13 = []() { return [](int x) { return x; }; };
   auto Evaluate14 = []() { return Evaluate9T{}; };
   auto Evaluate15 = []() { return Evaluate10T{}; };
-
 
   auto Mutate = [](int x) { return x + 1; };
   auto Crossover = [](int x, int y) { return x + y; };
@@ -328,8 +357,13 @@ BOOST_AUTO_TEST_CASE(random_flow_test) {
       AddEvaluate(sf);
     AddEvaluateOnLeaves(sf);
     auto nEvs = int(sf.GetNEvaluates());
-    auto minEvals = int(std::max(sf.GetIndex(sf.GetMaxIndexState()) + 1,
-                                 sf.GetInitialStates().size()));
+    auto &&inits = sf.GetInitialStates();
+    auto maxState =
+        *std::max_element(inits.begin(), inits.end(), [&](auto s1, auto s2) {
+          return sf.GetIndex(s1) < sf.GetIndex(s2);
+        });
+    auto minEvals =
+        int(std::max(sf.GetIndex(maxState) + 1, sf.GetInitialStates().size()));
     for (auto i = nEvs; i < minEvals; ++i)
       sf.SetEvaluate(AddMutate(sf));
 
