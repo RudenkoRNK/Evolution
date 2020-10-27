@@ -135,17 +135,17 @@ public:
     assert(presence);
     return GetSource(GetCrossoverPair(op));
   }
-  StateVector const &GetInitialStates() const noexcept { return initialStates; }
+  StateVector const &GetInitialStates() const { return initialStates; }
 
   // Counts
   size_t GetOutDegree(State state) const { return boost::out_degree(state, G); }
   size_t GetNStates() const { return boost::num_vertices(G); }
   size_t GetNOperations() const { return boost::num_edges(G); }
-  size_t GetNInitials() const noexcept { return GetInitialStates().size(); }
-  size_t GetNInitialEvaluates() const noexcept { return nInitialEvaluates; }
-  size_t GetNEvaluates() const noexcept { return nEvaluates; }
-  size_t GetNMutates() const noexcept { return nMutates; }
-  size_t GetNCrossovers() const noexcept { return nCrossovers; }
+  size_t GetNInitials() const { return GetInitialStates().size(); }
+  size_t GetNInitialEvaluates() const { return nInitialEvaluates; }
+  size_t GetNEvaluates() const { return nEvaluates; }
+  size_t GetNMutates() const { return nMutates; }
+  size_t GetNCrossovers() const { return nCrossovers; }
 
   // Properties
   bool IsMutate(Operation operation) const {
