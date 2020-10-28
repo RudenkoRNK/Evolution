@@ -1,9 +1,12 @@
 #pragma once
+#include "Utility/Misc.hpp"
 #include <algorithm>
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/dijkstra_shortest_paths.hpp>
 #include <boost/graph/graphviz.hpp>
 #include <boost/property_map/transform_value_property_map.hpp>
+#include <exception>
+#include <optional>
 #include <utility>
 #define NOMINMAX
 
@@ -63,18 +66,22 @@ public:
                           [&](auto state) { return GetIndex(state) == index; });
     if (s != inits.end())
       return *s;
+    auto g = Utility::ExceptionGuard(*this);
     auto state = boost::add_vertex({.index = index}, G);
     initialStates.push_back(state);
     return state;
   }
   State AddMutate(State state) {
+    auto g = Utility::ExceptionGuard(*this);
     auto ret = boost::add_vertex(StateProperties{}, G);
     boost::add_edge(state, ret, {}, G);
     ++nMutates;
     return ret;
   }
   State AddCrossover(State state0, State state1) {
-    assert(state0 != state1);
+    if (state0 == state1)
+      throw std::invalid_argument("Cannot crossover two same states");
+    auto g = Utility::ExceptionGuard(*this);
     auto ret = boost::add_vertex(StateProperties{}, G);
     boost::add_edge(state0, ret, {}, G);
     boost::add_edge(state1, ret, {}, G);
@@ -84,21 +91,34 @@ public:
   void SetEvaluate(State state) {
     if (IsEvaluate(state))
       return;
-    G[state].isEvaluate = true;
-    ++nEvaluates;
+    auto &&props = G[state];
     if (IsInitialState(state))
       ++nInitialEvaluates;
+    props.isEvaluate = true;
+    ++nEvaluates;
   }
   void SetSwapArgumentsAllowedInCrossover(
       bool isSwapArgumentsAllowedInCrossover = true) noexcept {
     this->isSwapArgumentsAllowedInCrossover = isSwapArgumentsAllowedInCrossover;
+  }
+  void Clear() noexcept {
+    nEvaluates = 0;
+    nMutates = 0;
+    nCrossovers = 0;
+    nInitialEvaluates = 0;
+    isSwapArgumentsAllowedInCrossover = false;
+    initialStates.clear();
+    // This is not noexcept actually, but without assuming so it is impossible
+    // to maintain basic exception safety at all
+    G.clear();
   }
 
   // State/Operation Access
   StateIteratorRange GetStates() const { return boost::vertices(G); }
   OperationIteratorRange GetOperations() const { return boost::edges(G); }
   State GetAnyParent(State state) const {
-    assert(!IsInitialState(state));
+    if (IsInitialState(state))
+      throw std::invalid_argument("State must not be initial");
     auto range = boost::inv_adjacent_vertices(state, G);
     assert(range.second - range.first <= 2);
     return *range.first;
@@ -107,7 +127,8 @@ public:
     return boost::adjacent_vertices(state, G);
   }
   Operation GetAnyInOperation(State state) const {
-    assert(!IsInitialState(state));
+    if (IsInitialState(state))
+      throw std::invalid_argument("State must not be initial");
     auto const &range = boost::in_edges(state, G);
     assert(range.second - range.first <= 2);
     assert(range.second != range.first);
@@ -123,7 +144,8 @@ public:
     return boost::target(operation, G);
   }
   Operation GetCrossoverPair(Operation operation) const {
-    assert(IsCrossover(operation));
+    if (!IsCrossover(operation))
+      throw std::invalid_argument("Operation must be a crossover");
     auto const &[oB, oE] = boost::in_edges(GetTarget(operation), G);
     assert(oE - oB == 2);
     if (operation == *oB)
@@ -132,7 +154,8 @@ public:
   }
   State GetOtherParent(State parent, State child) const {
     auto [op, presence] = boost::edge(parent, child, G);
-    assert(presence);
+    if (!presence)
+      throw std::invalid_argument("No edge between parent and child");
     return GetSource(GetCrossoverPair(op));
   }
   StateVector const &GetInitialStates() const { return initialStates; }
