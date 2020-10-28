@@ -14,7 +14,7 @@ private:
       tbb::concurrent_unordered_map<DNA *, std::atomic_int, std::hash<DNA *>>;
 
 #ifndef NDEBUG
-  StateFlow stateFlow;
+  StateFlow& stateFlow;
   Poll writePoll;
   Poll readPoll;
   tbb::concurrent_unordered_map<State, Addresses> inputAddress;
@@ -30,16 +30,11 @@ public:
     Crossover,
   };
 
-  TaskFlowDebugger(StateFlow const &stateFlow) {
+  TaskFlowDebugger(StateFlow &stateFlow) noexcept
 #ifndef NDEBUG
-    this->stateFlow = stateFlow;
+      : stateFlow(stateFlow)
 #endif // !NDEBUG
-  }
-
-  void SetStateFlow(StateFlow const &stateFlow_) {
-#ifndef NDEBUG
-    stateFlow = stateFlow_;
-#endif // !NDEBUG
+  {
   }
 
   void Register(DNA *dnaPtr, State state, bool isReadOnly, NodeType nodeType) {

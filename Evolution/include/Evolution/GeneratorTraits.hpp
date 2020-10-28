@@ -76,8 +76,8 @@ public:
     return generatorOrFunction;
   }
   template <typename FG>
-  auto static GetFunction(Generator<FG> const &generatorOrFunction)
-      -> decltype(generatorOrFunction()) {
+  auto static GetFunction(Generator<FG> const &generatorOrFunction) noexcept(
+      noexcept(generatorOrFunction())) -> decltype(generatorOrFunction()) {
     return generatorOrFunction();
   }
   template <typename FG>

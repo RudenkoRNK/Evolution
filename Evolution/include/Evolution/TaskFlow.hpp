@@ -171,7 +171,7 @@ public:
            bool isCrossoverLightweight = false)
       : tbbFlow(GenerateTBBFlow(stateFlow, isEvaluateLightweight,
                                 isMutateLightweight, isCrossoverLightweight)),
-        stateFlow(stateFlow), debugger(stateFlow),
+        stateFlow(stateFlow), debugger(this->stateFlow),
         evaluateTFG(GeneratorTraits::WrapFunctionOrGenerator(Evaluate)),
         mutateTFG(GeneratorTraits::WrapFunctionOrGenerator(Mutate)),
         crossoverTFG(GeneratorTraits::WrapFunctionOrGenerator(Crossover)) {}
@@ -213,6 +213,7 @@ public:
     return grades;
   }
 
+  // Strong exception guarantee
   void SetStateFlow(StateFlow &&stateFlow) {
     auto tbbFlow_ = GenerateTBBFlow(stateFlow, tbbFlow.isEvaluateLightweight,
                                     tbbFlow.isMutateLightweight,
@@ -223,7 +224,6 @@ public:
     tbbFlow.crossoverJoinNodes.clear();
     tbbFlow.crossoverNodes.clear();
     tbbFlow = std::move(tbbFlow_);
-    debugger.SetStateFlow(stateFlow);
     this->stateFlow = std::move(stateFlow);
   }
 
