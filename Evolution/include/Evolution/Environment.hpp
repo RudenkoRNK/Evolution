@@ -43,7 +43,7 @@ public:
                  isBenchmarkFunctions && TaskFlowInst::IsCrossoverLightweight(
                                              Crossover, this->DNAGenerator(),
                                              this->DNAGenerator())) {
-    ResizePopulation(stateFlow.GetNEvaluates());
+    RegeneratePopulation();
   }
 
   Population const &GetPopulation() const { return population; }
@@ -71,54 +71,76 @@ public:
   }
 
   // Also can be used to provide DNA examples
-  void SetPopulation(Population &&population) {
-    if (population.size() > GetPopulation().size())
+  void SetPopulation(Population &&pop) {
+    if (pop.size() > GetPopulationSize())
       throw std::length_error(
           "For setting larger population, first extend stateFlow");
-    AppendPopulation(std::move(population), population.size());
-  }
-
-  void RegeneratePopulation() {
-    auto newPop = Population{};
-    newPop.reserve(population.size());
-    std::generate_n(std::back_inserter(newPop), population.size(),
-                    DNAGenerator);
-    SetPopulation(std::move(newPop));
-  }
-
-  void SetStateFlow(StateFlow &&stateFlow) {
-    taskFlow.SetStateFlow(std::move(stateFlow));
-    ResizePopulation(taskFlow.GetStateFlow().GetNEvaluates());
-  }
-
-private:
-  void ResizePopulation(size_t newSize) {
-    if (population.size() < newSize) {
-      auto diff = newSize - population.size();
-      auto next = Population{};
-      next.reserve(diff);
-      std::generate_n(std::back_inserter(next), diff, DNAGenerator);
-      AppendPopulation(std::move(next));
-    } else {
-      grades.erase(grades.begin() + newSize, grades.end());
-      population.erase(population.begin() + newSize, population.end());
-    }
+    auto grd = EvaluatePopulation(pop);
+    AppendPopulation(std::move(pop), std::move(grd), pop.size());
+    SortPopulation(population, grades);
     assert(Verify(population, grades));
   }
 
-  void AppendPopulation(Population &&pop, size_t backOffset = 0) {
+  void RegeneratePopulation() {
+    ReservePopulation(GetPopulationSize());
+    auto pop = GeneratePopulation(GetPopulationSize());
     auto grd = EvaluatePopulation(pop);
+    SortPopulation(pop, grd);
+    AppendPopulation(std::move(pop), std::move(grd), population.size());
+    assert(Verify(population, grades));
+  }
+
+  void SetStateFlow(StateFlow &&stateFlow) {
+    auto newSize = stateFlow.GetNEvaluates();
+    auto oldSize = GetPopulationSize();
+    auto pop = Population{};
+    auto grd = Grades{};
+    if (newSize > oldSize) {
+      ReservePopulation(newSize);
+      pop = GeneratePopulation(newSize - oldSize);
+      grd = EvaluatePopulation(pop);
+    }
+    taskFlow.SetStateFlow(std::move(stateFlow));
+    if (newSize > oldSize) {
+      AppendPopulation(std::move(pop), std::move(grd));
+      SortPopulation(population, grades);
+    }
+    else
+      ShrinkPopulation(newSize);
+    assert(Verify(population, grades));
+  }
+
+private:
+  void ReservePopulation(size_t size) {
+    population.reserve(size);
+    grades.reserve(size);
+  }
+
+  void ShrinkPopulation(size_t newSize) noexcept {
+    assert(population.size() >= newSize);
+    grades.erase(grades.begin() + newSize, grades.end());
+    population.erase(population.begin() + newSize, population.end());
+  }
+
+  Population GeneratePopulation(size_t size) {
+    auto pop = Population{};
+    pop.reserve(size);
+    std::generate_n(std::back_inserter(pop), size, DNAGenerator);
+    return pop;
+  }
+
+  void AppendPopulation(Population &&pop, Grades &&grd,
+                        size_t backOffset = 0) noexcept {
     assert(population.size() >= backOffset);
     auto diff = pop.size() > backOffset ? pop.size() - backOffset : 0;
     auto newSize = population.size() + diff;
+    assert(population.capacity() >= newSize);
+    assert(grades.capacity() >= newSize);
 
-    population.reserve(newSize);
-    grades.reserve(newSize);
     std::move(pop.begin(), pop.end() - diff, population.end() - backOffset);
     std::move(pop.end() - diff, pop.end(), std::back_inserter(population));
     std::move(grd.begin(), grd.end() - diff, grades.end() - backOffset);
     std::move(grd.end() - diff, grd.end(), std::back_inserter(grades));
-    SortPopulation(population, grades);
   }
 
   void SortPopulation(Population &population, Grades &grades) const {

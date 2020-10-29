@@ -51,6 +51,7 @@ private:
   static_assert(std::is_move_constructible_v<DNA>);
   static_assert(std::is_copy_assignable_v<DNA>);
   static_assert(std::is_move_assignable_v<DNA>);
+  static_assert(noexcept(DNA(std::declval<DNA>())));
 
   // Grade should be a value
   static_assert(!std::is_const_v<Grade>);
@@ -59,6 +60,7 @@ private:
   static_assert(std::is_move_constructible_v<Grade>);
   static_assert(std::is_copy_assignable_v<Grade>);
   static_assert(std::is_move_assignable_v<Grade>);
+  static_assert(noexcept(Grade(std::declval<Grade>())));
 
   // Check that arguments and return values of functions are of type DNA
   static_assert(std::is_same_v<DNA, std::remove_cvref_t<typename CallableTraits<
