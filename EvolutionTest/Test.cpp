@@ -407,3 +407,58 @@ BOOST_AUTO_TEST_CASE(ctor_test) {
                                     });
   env.Run();
 }
+
+BOOST_AUTO_TEST_CASE(copy_test) {
+  auto copyCounter = std::atomic<size_t>{0};
+  struct DNA {
+    std::atomic<size_t> &copyCounter;
+    DNA(std::atomic<size_t> &copyCounter) : copyCounter(copyCounter) {}
+    DNA(DNA const &dna) noexcept : copyCounter(dna.copyCounter) {
+      ++copyCounter;
+    }
+    DNA(DNA &&dna) noexcept : copyCounter(dna.copyCounter) {}
+    DNA &operator=(DNA const &) {
+      ++copyCounter;
+      return *this;
+    }
+    DNA &operator=(DNA &&) noexcept { return *this; }
+  };
+
+  auto sf = Evolution::StateFlow{};
+  auto s0 = sf.GetOrAddInitialState(0);
+  auto s1 = sf.GetOrAddInitialState(1);
+  auto s2 = sf.AddMutate(s0);
+  auto s3 = sf.AddCrossover(s2, s1);
+  sf.SetEvaluate(s2);
+  sf.SetEvaluate(s3);
+
+  auto orig = DNA{copyCounter};
+  auto generator = [&]() -> DNA { return DNA(orig); };
+  auto Evaluate = [](DNA const &x) { return 0; };
+  auto Mutate1 = [](DNA const &x) { return DNA(x); };
+  auto Crossover1 = [](DNA const &x, DNA const &y) { return DNA(x); };
+
+  auto env1 = Evolution::Environment(generator, Evaluate, Mutate1, Crossover1,
+                                     sf, false);
+  env1.Run();
+  BOOST_TEST(copyCounter <= 4);
+  copyCounter = 0;
+
+  auto Mutate2 = [](DNA &&x) -> DNA & { return x; };
+  auto Crossover2 = [](DNA &&x, DNA &&y) -> DNA & { return x; };
+
+  auto env2 = Evolution::Environment(generator, Evaluate, Mutate2, Crossover2,
+                                     sf, false);
+  env2.Run();
+  BOOST_TEST(copyCounter <= 3);
+
+  copyCounter = 0;
+
+  auto Mutate3 = [](DNA x) -> DNA { return x; };
+  auto Crossover3 = [](DNA x, DNA y) -> DNA { return x; };
+
+  auto env3 = Evolution::Environment(generator, Evaluate, Mutate3, Crossover3,
+                                     sf, false);
+  env3.Run();
+  BOOST_TEST(copyCounter <= 3);
+}

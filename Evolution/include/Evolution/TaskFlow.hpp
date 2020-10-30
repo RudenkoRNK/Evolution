@@ -31,6 +31,19 @@ private:
   using MutateFunction = typename GeneratorTraits::Function<MutateFG>;
   using CrossoverFunction = typename GeneratorTraits::Function<CrossoverFG>;
 
+  using EvaluateArg =
+      typename Utility::CallableTraits<EvaluateFunction>::template ArgType<0>;
+  using MutateArg =
+      typename Utility::CallableTraits<MutateFunction>::template ArgType<0>;
+  using MutateReturn =
+      typename Utility::CallableTraits<MutateFunction>::ReturnType;
+  using CrossoverArg0 =
+      typename Utility::CallableTraits<CrossoverFunction>::template ArgType<0>;
+  using CrossoverArg1 =
+      typename Utility::CallableTraits<CrossoverFunction>::template ArgType<1>;
+  using CrossoverReturn =
+      typename Utility::CallableTraits<CrossoverFunction>::ReturnType;
+
   template <typename T>
   bool constexpr static isVariant =
       TypeTraits::isInstanceOf<std::variant, std::remove_reference_t<T>>;
@@ -63,18 +76,12 @@ private:
   static_assert(noexcept(Grade(std::declval<Grade>())));
 
   // Check that arguments and return values of functions are of type DNA
-  static_assert(std::is_same_v<DNA, std::remove_cvref_t<typename CallableTraits<
-                                        EvaluateFunction>::ArgType<0>>>);
-  static_assert(std::is_same_v<DNA, std::remove_cvref_t<typename CallableTraits<
-                                        MutateFunction>::ReturnType>>);
-  static_assert(std::is_same_v<DNA, std::remove_cvref_t<typename CallableTraits<
-                                        MutateFunction>::ArgType<0>>>);
-  static_assert(std::is_same_v<DNA, std::remove_cvref_t<typename CallableTraits<
-                                        CrossoverFunction>::ReturnType>>);
-  static_assert(std::is_same_v<DNA, std::remove_cvref_t<typename CallableTraits<
-                                        CrossoverFunction>::ArgType<0>>>);
-  static_assert(std::is_same_v<DNA, std::remove_cvref_t<typename CallableTraits<
-                                        CrossoverFunction>::ArgType<1>>>);
+  static_assert(std::is_same_v<DNA, std::remove_cvref_t<EvaluateArg>>);
+  static_assert(std::is_same_v<DNA, std::remove_cvref_t<MutateReturn>>);
+  static_assert(std::is_same_v<DNA, std::remove_cvref_t<MutateArg>>);
+  static_assert(std::is_same_v<DNA, std::remove_cvref_t<CrossoverReturn>>);
+  static_assert(std::is_same_v<DNA, std::remove_cvref_t<CrossoverArg0>>);
+  static_assert(std::is_same_v<DNA, std::remove_cvref_t<CrossoverArg1>>);
 
   // Evaluate function must not modify its argument
   static_assert(CallableTraits<EvaluateFunction>::template isConst<1> ||
@@ -90,9 +97,12 @@ private:
       CallableTraits<CrossoverFunction>::template isLValueReference<2> ||
       !CallableTraits<CrossoverFunction>::template isConst<2>);
 
-  // Mutate and crossover must not return constant values
+  // Mutate and crossover must not return constant values or rvalue references
   static_assert(!CallableTraits<MutateFunction>::template isConst<0>);
   static_assert(!CallableTraits<CrossoverFunction>::template isConst<0>);
+  static_assert(!CallableTraits<MutateFunction>::template isRValueReference<0>);
+  static_assert(
+      !CallableTraits<CrossoverFunction>::template isRValueReference<0>);
 
   auto constexpr static isMutateInPlace =
       (!CallableTraits<MutateFunction>::template isConst<1>);
@@ -241,7 +251,8 @@ public:
     auto dna_ = DNA(dna);
     if constexpr (isMutateMovable)
       return IsFGLightweight(Mutate, std::move(dna_));
-    return IsFGLightweight(Mutate, dna_);
+    else
+      return IsFGLightweight(Mutate, dna_);
   }
   bool static IsCrossoverLightweight(CrossoverFG const &Crossover,
                                      DNA const &dna0, DNA const &dna1) {
@@ -250,7 +261,8 @@ public:
     auto dna0_ = DNA(dna0);
     if constexpr (!isCrossoverMovableFirst)
       return IsCrossoverLightweight_(Crossover, dna0_, dna1);
-    return IsCrossoverLightweight_(Crossover, std::move(dna0_), dna1);
+    else
+      return IsCrossoverLightweight_(Crossover, std::move(dna0_), dna1);
   }
 
 private:
@@ -295,7 +307,7 @@ private:
       iSrc = CopyHelper(*iSrc);
 
     auto &&Mutate = GetMutateFunction();
-    auto MutatePtr = [&](DNAPtr iSrc) {
+    auto MutatePtr = [&](DNAPtr iSrc) -> decltype(auto) {
       if constexpr (isMutateMovable) {
         assert(!isCopy || iSrcOrig != iSrc);
         return Mutate(std::move(*iSrc));
@@ -348,7 +360,7 @@ private:
       iSrc1 = CopyHelper(*iSrc1);
 
     auto &&Crossover = GetCrossoverFunction();
-    auto CrossoverPtr = [&](DNAPtr iSrc0, DNAPtr iSrc1) {
+    auto CrossoverPtr = [&](DNAPtr iSrc0, DNAPtr iSrc1) -> decltype(auto) {
       if constexpr (isCrossoverMovableFirst) {
         assert(!isCopy0 || iSrcOrig0 != iSrc0);
         if constexpr (isCrossoverMovableSecond) {
@@ -727,7 +739,8 @@ private:
     if constexpr (isCrossoverMovableSecond)
       return IsFGLightweight(Crossover, std::forward<DNAFirst>(dna0),
                              std::move(dna1_));
-    return IsFGLightweight(Crossover, std::forward<DNAFirst>(dna0), dna1_);
+    else
+      return IsFGLightweight(Crossover, std::forward<DNAFirst>(dna0), dna1_);
   }
 
   template <typename FG, typename... Args>
