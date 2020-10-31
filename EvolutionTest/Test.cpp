@@ -139,6 +139,48 @@ BOOST_AUTO_TEST_CASE(env_ctor_test) {
   Evolution::Environment(generator, Evaluate15, Mutate, Crossover, sf, true);
 }
 
+BOOST_AUTO_TEST_CASE(env_ctor_test2) {
+  auto sf = Evolution::GenerateStateFlow(10);
+  auto Mutate1 = [](std::string x) -> std::string { return x; };
+  auto Mutate2 = [](std::string &x) -> std::string { return x; };
+  auto Mutate3 = [](std::string const &x) -> std::string { return x; };
+  auto Mutate4 = [](std::string &&x) -> std::string { return x; };
+  auto Mutate5 = [](std::string &x) -> std::string & { return x; };
+  auto Mutate6 = [](std::string &x) -> std::string const & { return x; };
+  auto Mutate7 = [](std::string & x) -> std::string && { return std::move(x); };
+  auto Mutate8 = [](std::string &x) -> std::string { return x; };
+
+  auto Evaluate = [](std::string const &x) {
+    auto gen = std::mt19937(0);
+    auto rand = std::uniform_int_distribution<>(0, 255);
+    return rand(gen);
+  };
+  auto Crossover = [](std::string const &x,
+                      std::string const &y) -> decltype(auto) { return x + y; };
+  auto generator = []() -> std::string {
+    auto gen = std::mt19937(0);
+    auto rand = std::uniform_int_distribution<>(0, 255);
+    return std::string(1, static_cast<char>(rand(gen)));
+  };
+
+  Evolution::Environment(generator, Evaluate, Mutate1, Crossover, sf, true)
+      .Run(size_t{3});
+  Evolution::Environment(generator, Evaluate, Mutate2, Crossover, sf, true)
+      .Run(size_t{3});
+  Evolution::Environment(generator, Evaluate, Mutate3, Crossover, sf, true)
+      .Run(size_t{3});
+  Evolution::Environment(generator, Evaluate, Mutate4, Crossover, sf, true)
+      .Run(size_t{3});
+  Evolution::Environment(generator, Evaluate, Mutate5, Crossover, sf, true)
+      .Run(size_t{3});
+  Evolution::Environment(generator, Evaluate, Mutate6, Crossover, sf, true)
+      .Run(size_t{3});
+  Evolution::Environment(generator, Evaluate, Mutate7, Crossover, sf, true)
+      .Run(size_t{3});
+  Evolution::Environment(generator, Evaluate, Mutate8, Crossover, sf, true)
+      .Run(size_t{3});
+}
+
 BOOST_AUTO_TEST_CASE(quadratic_equation) {
   // Try to solve quadratic equation with guessing
   // x^2 + bx + c = 0

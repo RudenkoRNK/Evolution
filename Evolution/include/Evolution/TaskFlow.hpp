@@ -279,6 +279,8 @@ private:
 
   DNAPtr CopyHelper(DNA const &src) const { return DNAPtr(new DNA(src)); }
   DNAPtr MoveHelper(DNA &&src) const { return DNAPtr(new DNA(std::move(src))); }
+  DNAPtr SaveHelper(DNA const &src) const { return CopyHelper(src); }
+  DNAPtr SaveHelper(DNA &&src) const { return MoveHelper(std::move(src)); }
   DNAPtr InputHelper(DNA *iSrc, bool isCopy, State state) {
     debugger.Register(iSrc, state, isCopy, NodeType::Input);
     auto ret = DNAPtr{};
@@ -321,7 +323,7 @@ private:
     auto ret = DNAPtr{};
     auto &&dst = MutatePtr(iSrc);
     if (!isPtrMove)
-      ret = MoveHelper(std::move(dst));
+      ret = SaveHelper(std::move(dst));
     else {
       *iSrc = std::move(dst);
       ret = iSrc;
@@ -386,7 +388,7 @@ private:
     auto ret = DNAPtr{};
     auto &&dst = CrossoverPtr(iSrc0, iSrc1);
     if (!isPtrMove0 && !isPtrMove1)
-      ret = MoveHelper(std::move(dst));
+      ret = SaveHelper(std::move(dst));
     else if (isPtrMove0 && !isPtrMove1) {
       *iSrc0 = std::move(dst);
       ret = iSrc0;
