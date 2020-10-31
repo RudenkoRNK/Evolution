@@ -14,7 +14,7 @@ private:
       tbb::concurrent_unordered_map<DNA *, std::atomic_int, std::hash<DNA *>>;
 
 #ifndef NDEBUG
-  StateFlow& stateFlow;
+  StateFlow &stateFlow;
   Poll writePoll;
   Poll readPoll;
   tbb::concurrent_unordered_map<State, Addresses> inputAddress;

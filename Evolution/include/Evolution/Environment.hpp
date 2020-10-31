@@ -107,8 +107,7 @@ public:
     if (newSize > oldSize) {
       AppendPopulation(std::move(pop), std::move(grd));
       SortPopulation(population, grades);
-    }
-    else
+    } else
       ShrinkPopulation(newSize);
     assert(Verify(population, grades));
   }
