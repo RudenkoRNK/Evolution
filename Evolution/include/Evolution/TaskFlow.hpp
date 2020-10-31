@@ -313,7 +313,7 @@ private:
         assert(!isCopy || iSrcOrig != iSrc);
         return Mutate(std::move(*iSrc));
       } else {
-        assert(!isCopy || !isMutateInPlace);
+        assert(!isCopy || iSrcOrig != iSrc || !isMutateInPlace);
         return Mutate(*iSrc);
       }
     };
@@ -368,16 +368,16 @@ private:
           assert(!isCopy1 || iSrcOrig1 != iSrc1);
           return Crossover(std::move(*iSrc0), std::move(*iSrc1));
         } else {
-          assert(!isCopy1 || !isCrossoverInPlaceSecond);
+          assert(!isCopy1 || iSrcOrig1 != iSrc1 || !isCrossoverInPlaceSecond);
           return Crossover(std::move(*iSrc0), *iSrc1);
         }
       } else {
-        assert(!isCopy0 || !isCrossoverInPlaceFirst);
+        assert(!isCopy0 || iSrcOrig0 != iSrc0 || !isCrossoverInPlaceFirst);
         if constexpr (isCrossoverMovableSecond) {
           assert(!isCopy1 || iSrcOrig1 != iSrc1);
           return Crossover(*iSrc0, std::move(*iSrc1));
         } else {
-          assert(!isCopy1 || !isCrossoverInPlaceSecond);
+          assert(!isCopy1 || iSrcOrig1 != iSrc1 || !isCrossoverInPlaceSecond);
           return Crossover(*iSrc0, *iSrc1);
         }
       }
