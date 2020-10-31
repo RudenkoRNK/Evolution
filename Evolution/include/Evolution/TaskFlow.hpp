@@ -146,11 +146,11 @@ private:
       FunctionNode<std::tuple<DNAPtr, DNAPtr>, DNAPtr>,
       FunctionNode<std::tuple<DNAPtr, DNAPtr>, DNAPtr, tbb::flow::lightweight>>;
   using CrossoverJoinNode = tbb::flow::join_node<std::tuple<DNAPtr, DNAPtr>>;
-  using EvaluateTFG =
-      typename GeneratorTraits::TBBGeneratorOrFunction<EvaluateFG>;
-  using MutateTFG = typename GeneratorTraits::TBBGeneratorOrFunction<MutateFG>;
-  using CrossoverTFG =
-      typename GeneratorTraits::TBBGeneratorOrFunction<CrossoverFG>;
+  using EvaluateFTG =
+      typename GeneratorTraits::FunctionOrTBBGenerator<EvaluateFG>;
+  using MutateFTG = typename GeneratorTraits::FunctionOrTBBGenerator<MutateFG>;
+  using CrossoverFTG =
+      typename GeneratorTraits::FunctionOrTBBGenerator<CrossoverFG>;
 
   using NodeType = typename TaskFlowDebugger<DNA>::NodeType;
 
@@ -172,9 +172,9 @@ private:
   StateFlow stateFlow;
   TaskFlowDebugger<DNA> debugger;
   tbb::concurrent_vector<std::pair<DNAPtr, Grade>> evaluateBuffer;
-  EvaluateTFG evaluateTFG;
-  MutateTFG mutateTFG;
-  CrossoverTFG crossoverTFG;
+  EvaluateFTG evaluateFTG;
+  MutateFTG mutateFTG;
+  CrossoverFTG crossoverFTG;
 
 public:
   TaskFlow(EvaluateFG const &Evaluate, MutateFG const &Mutate,
@@ -184,9 +184,9 @@ public:
       : tbbFlow(GenerateTBBFlow(stateFlow, isEvaluateLightweight,
                                 isMutateLightweight, isCrossoverLightweight)),
         stateFlow(stateFlow), debugger(this->stateFlow),
-        evaluateTFG(GeneratorTraits::WrapFunctionOrGenerator(Evaluate)),
-        mutateTFG(GeneratorTraits::WrapFunctionOrGenerator(Mutate)),
-        crossoverTFG(GeneratorTraits::WrapFunctionOrGenerator(Crossover)) {}
+        evaluateFTG(GeneratorTraits::WrapFunctionOrGenerator(Evaluate)),
+        mutateFTG(GeneratorTraits::WrapFunctionOrGenerator(Mutate)),
+        crossoverFTG(GeneratorTraits::WrapFunctionOrGenerator(Crossover)) {}
 
   void Run(Population &population, Grades &grades) {
     RunTaskFlow(population);
@@ -267,13 +267,13 @@ public:
 
 private:
   EvaluateFunction &GetEvaluateFunction() {
-    return GeneratorTraits::GetFunction<EvaluateFG>(evaluateTFG);
+    return GeneratorTraits::GetFunction<EvaluateFG>(evaluateFTG);
   }
   MutateFunction &GetMutateFunction() {
-    return GeneratorTraits::GetFunction<MutateFG>(mutateTFG);
+    return GeneratorTraits::GetFunction<MutateFG>(mutateFTG);
   }
   CrossoverFunction &GetCrossoverFunction() {
-    return GeneratorTraits::GetFunction<CrossoverFG>(crossoverTFG);
+    return GeneratorTraits::GetFunction<CrossoverFG>(crossoverFTG);
   }
 
   DNAPtr CopyHelper(DNA const &src) const { return DNAPtr(new DNA(src)); }

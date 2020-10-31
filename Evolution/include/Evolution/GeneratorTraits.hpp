@@ -33,7 +33,7 @@ public:
   using TBBGenerator = tbb::enumerable_thread_specific<Function<FG>>;
 
   template <typename FG>
-  using TBBGeneratorOrFunction =
+  using FunctionOrTBBGenerator =
       std::conditional_t<isGenerator<FG>, TBBGenerator<FG>, Function<FG>>;
 
 private:
@@ -58,7 +58,7 @@ public:
   template <typename FG>
   auto static WrapFunctionOrGenerator(FG &&fg)
       -> std::conditional_t<isGenerator<FG> || !is_std_function<FG>,
-                            TBBGeneratorOrFunction<FG>, FG &&> {
+                            FunctionOrTBBGenerator<FG>, FG &&> {
     if constexpr (!isGenerator<FG>)
       return to_std_function<FG>(std::forward<FG>(fg));
     else
