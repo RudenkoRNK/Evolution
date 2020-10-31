@@ -1,5 +1,6 @@
 #pragma once
 #define NOMINMAX
+#include "Evolution/Concepts.hpp"
 #include "Evolution/GeneratorTraits.hpp"
 #include "Evolution/StateFlow.hpp"
 #include "Evolution/TaskFlowDebugger.hpp"
@@ -19,7 +20,9 @@
 #include <vector>
 
 namespace Evolution {
-template <typename EvaluateFG, typename MutateFG, typename CrossoverFG>
+template <EvaluateFunctionOrGeneratorConcept EvaluateFG,
+          MutateFunctionOrGeneratorConcept MutateFG,
+          CrossoverFunctionOrGeneratorConcept CrossoverFG>
 class TaskFlow final {
 
 private:
@@ -58,23 +61,6 @@ public:
   using Grades = std::vector<Grade>;
 
 private:
-  // DNA should be a modifiable self-sufficient type
-  static_assert(!std::is_const_v<DNA>);
-  static_assert(!std::is_reference_v<DNA>);
-  static_assert(std::is_copy_constructible_v<DNA>);
-  static_assert(std::is_move_constructible_v<DNA>);
-  static_assert(std::is_copy_assignable_v<DNA>);
-  static_assert(std::is_move_assignable_v<DNA>);
-  static_assert(noexcept(DNA(std::declval<DNA>())));
-
-  // Grade should be a value
-  static_assert(!std::is_const_v<Grade>);
-  static_assert(!std::is_reference_v<Grade>);
-  static_assert(std::is_copy_constructible_v<Grade>);
-  static_assert(std::is_move_constructible_v<Grade>);
-  static_assert(std::is_copy_assignable_v<Grade>);
-  static_assert(std::is_move_assignable_v<Grade>);
-  static_assert(noexcept(Grade(std::declval<Grade>())));
 
   // Check that arguments and return values of functions are of type DNA
   static_assert(std::is_same_v<DNA, std::remove_cvref_t<EvaluateArg>>);
@@ -83,27 +69,6 @@ private:
   static_assert(std::is_same_v<DNA, std::remove_cvref_t<CrossoverReturn>>);
   static_assert(std::is_same_v<DNA, std::remove_cvref_t<CrossoverArg0>>);
   static_assert(std::is_same_v<DNA, std::remove_cvref_t<CrossoverArg1>>);
-
-  // Evaluate function must not modify its argument
-  static_assert(CallableTraits<EvaluateFunction>::template isConst<1> ||
-                CallableTraits<EvaluateFunction>::template isValue<1>);
-
-  // Const qualifier can appear only with r-value reference
-  static_assert(CallableTraits<MutateFunction>::template isLValueReference<1> ||
-                !CallableTraits<MutateFunction>::template isConst<1>);
-  static_assert(
-      CallableTraits<CrossoverFunction>::template isLValueReference<1> ||
-      !CallableTraits<CrossoverFunction>::template isConst<1>);
-  static_assert(
-      CallableTraits<CrossoverFunction>::template isLValueReference<2> ||
-      !CallableTraits<CrossoverFunction>::template isConst<2>);
-
-  // Mutate and crossover must not return constant values or rvalue references
-  static_assert(!CallableTraits<MutateFunction>::template isConst<0>);
-  static_assert(!CallableTraits<CrossoverFunction>::template isConst<0>);
-  static_assert(!CallableTraits<MutateFunction>::template isRValueReference<0>);
-  static_assert(
-      !CallableTraits<CrossoverFunction>::template isRValueReference<0>);
 
   auto constexpr static isMutateInPlace =
       (!CallableTraits<MutateFunction>::template isConst<1>);

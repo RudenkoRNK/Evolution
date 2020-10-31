@@ -1,11 +1,14 @@
 #pragma once
+#include "Evolution/Concepts.hpp"
 #include "Evolution/StateFlow.hpp"
 #include "Evolution/TaskFlow.hpp"
 #include "Utility/Misc.hpp"
 
 namespace Evolution {
 
-template <typename EvaluateFG, typename MutateFG, typename CrossoverFG>
+template <EvaluateFunctionOrGeneratorConcept EvaluateFG,
+          MutateFunctionOrGeneratorConcept MutateFG,
+          CrossoverFunctionOrGeneratorConcept CrossoverFG>
 class Environment final {
 private:
   using TaskFlowInst = TaskFlow<EvaluateFG, MutateFG, CrossoverFG>;
