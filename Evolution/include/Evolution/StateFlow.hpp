@@ -2,9 +2,7 @@
 #include "Utility/Misc.hpp"
 #include <algorithm>
 #include <boost/graph/adjacency_list.hpp>
-#include <boost/graph/dijkstra_shortest_paths.hpp>
 #include <boost/graph/graphviz.hpp>
-#include <boost/property_map/transform_value_property_map.hpp>
 #include <exception>
 #include <optional>
 #include <utility>
