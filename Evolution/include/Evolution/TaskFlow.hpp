@@ -53,7 +53,8 @@ public:
       typename CallableTraits<EvaluateFunction>::template ArgType<0>>;
   using Population = std::vector<DNA>;
 
-  using Grade = typename CallableTraits<EvaluateFunction>::ReturnType;
+  using Grade = std::remove_cvref_t<
+      typename CallableTraits<EvaluateFunction>::ReturnType>;
   using Grades = std::vector<Grade>;
 
 private:
