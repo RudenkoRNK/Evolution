@@ -6,28 +6,28 @@ namespace Evolution {
 template <typename Callable>
 using CallableTraits = Utility::CallableTraits<Callable>;
 
-template <typename T> concept Regular = requires() {
+template <typename T> concept DNAConcept = requires() {
   requires std::copyable<T>;
   requires std::is_nothrow_move_constructible_v<T>;
   requires std::is_nothrow_move_assignable_v<T>;
 };
 
-template <typename T> concept EvaluateArgument = requires() {
-  requires Regular<std::remove_cvref_t<T>>;
+template <typename T> concept EvaluateArgumentConcept = requires() {
+  requires DNAConcept<std::remove_cvref_t<T>>;
   requires std::is_const_v<std::remove_reference_t<T>> ||
       !std::is_reference_v<T>;
 };
 
-template <typename T> concept EvaluateReturn = requires() {
-  requires Regular<std::remove_cvref_t<T>>;
+template <typename T> concept EvaluateReturnConcept = requires() {
+  requires DNAConcept<std::remove_cvref_t<T>>;
 };
 
 template <typename EvaluateFunction>
 concept EvaluateFunctionConcept = requires() {
   requires CallableTraits<EvaluateFunction>::nArguments == 1;
-  requires EvaluateArgument<
+  requires EvaluateArgumentConcept<
       typename CallableTraits<EvaluateFunction>::template ArgType<0>>;
-  requires EvaluateReturn<
+  requires EvaluateReturnConcept<
       typename CallableTraits<EvaluateFunction>::ReturnType>;
 };
 
@@ -42,21 +42,21 @@ template <typename EvaluateFG>
 concept EvaluateFunctionOrGeneratorConcept =
     EvaluateGeneratorConcept<EvaluateFG> || EvaluateFunctionConcept<EvaluateFG>;
 
-template <typename T> concept MutateCrossoverArgument = requires() {
-  requires Regular<std::remove_cvref_t<T>>;
+template <typename T> concept MutateCrossoverArgumentConcept = requires() {
+  requires DNAConcept<std::remove_cvref_t<T>>;
   requires std::is_lvalue_reference_v<T> ||
       !std::is_const_v<std::remove_reference_t<T>>;
 };
 
-template <typename T> concept MutateCrossoverReturn = requires() {
-  requires Regular<std::remove_cvref_t<T>>;
+template <typename T> concept MutateCrossoverReturnConcept = requires() {
+  requires DNAConcept<std::remove_cvref_t<T>>;
 };
 
 template <typename MutateFunction> concept MutateFunctionConcept = requires() {
   requires CallableTraits<MutateFunction>::nArguments == 1;
-  requires MutateCrossoverArgument<
+  requires MutateCrossoverArgumentConcept<
       typename CallableTraits<MutateFunction>::template ArgType<0>>;
-  requires MutateCrossoverReturn<
+  requires MutateCrossoverReturnConcept<
       typename CallableTraits<MutateFunction>::ReturnType>;
   requires std::is_same_v<
       typename std::remove_cvref_t<
@@ -79,11 +79,11 @@ concept MutateFunctionOrGeneratorConcept =
 template <typename CrossoverFunction>
 concept CrossoverFunctionConcept = requires() {
   requires CallableTraits<CrossoverFunction>::nArguments == 2;
-  requires MutateCrossoverArgument<
+  requires MutateCrossoverArgumentConcept<
       typename CallableTraits<CrossoverFunction>::template ArgType<0>>;
-  requires MutateCrossoverArgument<
+  requires MutateCrossoverArgumentConcept<
       typename CallableTraits<CrossoverFunction>::template ArgType<1>>;
-  requires MutateCrossoverReturn<
+  requires MutateCrossoverReturnConcept<
       typename CallableTraits<CrossoverFunction>::ReturnType>;
   requires std::is_same_v<
       typename std::remove_cvref_t<
