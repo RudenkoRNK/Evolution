@@ -76,7 +76,8 @@ private:
   void RegisterState(DNA *dnaPtr, State state, NodeType nodeType) {
     CheckType(dnaPtr, state, nodeType);
     CheckParentsComputed(dnaPtr, state);
-    CheckChildrenNotComputed(dnaPtr, state);
+    if (nodeType != NodeType::Evaluate)
+      CheckChildrenNotComputed(dnaPtr, state);
     CheckComputeOrder(dnaPtr, state, nodeType);
     inputAddress[state].push_back(dnaPtr);
   }

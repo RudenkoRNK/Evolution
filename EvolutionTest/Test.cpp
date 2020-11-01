@@ -503,4 +503,13 @@ BOOST_AUTO_TEST_CASE(copy_test) {
                                      sf, false);
   env3.Run();
   BOOST_TEST(copyCounter <= 3);
+
+  auto Mutate4 = [&](DNA const &x) -> DNA & { return orig; };
+  auto Crossover4 = [&](DNA const &x, DNA const &y) -> DNA & { return orig; };
+
+  auto env4 = Evolution::Environment(generator, Evaluate, Mutate4, Crossover4,
+                                     sf, false);
+  copyCounter = 0;
+  env4.Run(size_t{100});
+  BOOST_TEST(copyCounter == 0);
 }
