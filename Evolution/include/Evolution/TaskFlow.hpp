@@ -489,10 +489,7 @@ private:
   TBBFlow GenerateTBBFlow(StateFlow const &stateFlow,
                           bool isEvaluateLightweight, bool isMutateLightweight,
                           bool isCrossoverLightweight) {
-    auto isNotReady = stateFlow.IsNotReady();
-    if (isNotReady)
-      throw std::invalid_argument("Provided stateflow is not ready. " +
-                                  isNotReady.value());
+    assert(!stateFlow.IsNotReady());
     using InputNodeRef = std::reference_wrapper<InputNode>;
     using MutateNodeRef = std::reference_wrapper<MutateNode>;
     using CrossoverNodeRef = std::reference_wrapper<CrossoverNode>;

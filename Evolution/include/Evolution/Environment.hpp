@@ -75,9 +75,8 @@ public:
 
   // Also can be used to provide DNA examples
   void SetPopulation(Population &&pop) {
-    if (pop.size() > GetPopulationSize())
-      throw std::length_error(
-          "For setting larger population, first extend stateFlow");
+    assert(pop.size() <= GetPopulationSize() &&
+           "For setting larger population, first extend stateFlow");
     auto grd = EvaluatePopulation(pop);
     AppendPopulation(std::move(pop), std::move(grd), pop.size());
     SortPopulation(population, grades);
