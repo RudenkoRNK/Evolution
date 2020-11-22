@@ -64,13 +64,13 @@ public:
                           [&](auto state) { return GetIndex(state) == index; });
     if (s != inits.end())
       return *s;
-    auto g = Utility::ExceptionGuard(*this);
+    auto g = Utility::RAII([]() {}, [&]() noexcept { Clear(); });
     auto state = boost::add_vertex({.index = index}, G);
     initialStates.push_back(state);
     return state;
   }
   State AddMutate(State state) {
-    auto g = Utility::ExceptionGuard(*this);
+    auto g = Utility::RAII([]() {}, [&]() noexcept { Clear(); });
     auto ret = boost::add_vertex(StateProperties{}, G);
     boost::add_edge(state, ret, {}, G);
     ++nMutates;
@@ -79,7 +79,7 @@ public:
   State AddCrossover(State state0, State state1) {
     if (state0 == state1)
       throw std::invalid_argument("Cannot crossover two same states");
-    auto g = Utility::ExceptionGuard(*this);
+    auto g = Utility::RAII([]() {}, [&]() noexcept { Clear(); });
     auto ret = boost::add_vertex(StateProperties{}, G);
     boost::add_edge(state0, ret, {}, G);
     boost::add_edge(state1, ret, {}, G);
