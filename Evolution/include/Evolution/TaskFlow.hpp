@@ -47,7 +47,7 @@ private:
 
   template <typename T>
   bool constexpr static isVariant =
-      TypeTraits::isInstanceOf<std::variant, std::remove_reference_t<T>>;
+      TypeTraits::isInstanceOf<std::variant, std::remove_cvref_t<T>>;
 
 public:
   using DNA = std::remove_cvref_t<
@@ -60,12 +60,12 @@ public:
 
 private:
   // Check that arguments and return values of functions are of type DNA
-  static_assert(std::is_same_v<DNA, std::remove_cvref_t<EvaluateArg>>);
-  static_assert(std::is_same_v<DNA, std::remove_cvref_t<MutateReturn>>);
-  static_assert(std::is_same_v<DNA, std::remove_cvref_t<MutateArg>>);
-  static_assert(std::is_same_v<DNA, std::remove_cvref_t<CrossoverReturn>>);
-  static_assert(std::is_same_v<DNA, std::remove_cvref_t<CrossoverArg0>>);
-  static_assert(std::is_same_v<DNA, std::remove_cvref_t<CrossoverArg1>>);
+  static_assert(std::is_same_v<DNA, DNADecay<EvaluateArg>>);
+  static_assert(std::is_same_v<DNA, DNADecay<MutateReturn>>);
+  static_assert(std::is_same_v<DNA, DNADecay<MutateArg>>);
+  static_assert(std::is_same_v<DNA, DNADecay<CrossoverReturn>>);
+  static_assert(std::is_same_v<DNA, DNADecay<CrossoverArg0>>);
+  static_assert(std::is_same_v<DNA, DNADecay<CrossoverArg1>>);
 
   auto constexpr static isMutateInPlace =
       (!CallableTraits<MutateFunction>::template isConst<1>);

@@ -6,9 +6,24 @@ namespace Evolution {
 template <typename Callable>
 using CallableTraits = Utility::CallableTraits<Callable>;
 
+template <typename T> static decltype(auto) _DNADecay() {
+  if constexpr (Utility::TypeTraits::isInstanceOf<std::unique_ptr, T>)
+    return *(std::declval<T>());
+  else
+    return *static_cast<std::add_pointer_t<T>>(nullptr);
+}
+template <typename T>
+using DNADecay = std::remove_cvref_t<decltype(_DNADecay<T>())>;
+
 template <typename T> concept DNAConcept = requires() {
   requires std::copyable<T>;
-  requires std::is_nothrow_move_constructible_v<T>;
+  requires std::is_nothrow_swappable_v<T>;
+  requires std::is_nothrow_move_assignable_v<T>;
+};
+
+template <typename T> concept GradeConcept = requires() {
+  requires std::copyable<T>;
+  requires std::is_nothrow_swappable_v<T>;
   requires std::is_nothrow_move_assignable_v<T>;
 };
 
@@ -19,12 +34,13 @@ template <typename T> concept EvaluateArgumentConcept = requires() {
 };
 
 template <typename T> concept EvaluateReturnConcept = requires() {
-  requires DNAConcept<std::remove_cvref_t<T>>;
+  requires GradeConcept<T>;
 };
 
 template <typename EvaluateFunction>
 concept EvaluateFunctionConcept = requires() {
   requires CallableTraits<EvaluateFunction>::nArguments == 1;
+  requires CallableTraits<EvaluateFunction>::template isValue<0>;
   requires EvaluateArgumentConcept<
       typename CallableTraits<EvaluateFunction>::template ArgType<0>>;
   requires EvaluateReturnConcept<
@@ -49,7 +65,7 @@ template <typename T> concept MutateCrossoverArgumentConcept = requires() {
 };
 
 template <typename T> concept MutateCrossoverReturnConcept = requires() {
-  requires DNAConcept<std::remove_cvref_t<T>>;
+  requires DNAConcept<DNADecay<T>>;
 };
 
 template <typename MutateFunction> concept MutateFunctionConcept = requires() {
@@ -60,7 +76,7 @@ template <typename MutateFunction> concept MutateFunctionConcept = requires() {
       typename CallableTraits<MutateFunction>::ReturnType>;
   requires std::is_same_v<
       typename std::remove_cvref_t<
-          typename CallableTraits<MutateFunction>::ReturnType>,
+          DNADecay<typename CallableTraits<MutateFunction>::ReturnType>>,
       typename std::remove_cvref_t<
           typename CallableTraits<MutateFunction>::template ArgType<0>>>;
 };
@@ -87,12 +103,12 @@ concept CrossoverFunctionConcept = requires() {
       typename CallableTraits<CrossoverFunction>::ReturnType>;
   requires std::is_same_v<
       typename std::remove_cvref_t<
-          typename CallableTraits<CrossoverFunction>::ReturnType>,
+          DNADecay<typename CallableTraits<CrossoverFunction>::ReturnType>>,
       typename std::remove_cvref_t<
           typename CallableTraits<CrossoverFunction>::template ArgType<0>>>;
   requires std::is_same_v<
       typename std::remove_cvref_t<
-          typename CallableTraits<CrossoverFunction>::ReturnType>,
+          DNADecay<typename CallableTraits<CrossoverFunction>::ReturnType>>,
       typename std::remove_cvref_t<
           typename CallableTraits<CrossoverFunction>::template ArgType<1>>>;
 };
