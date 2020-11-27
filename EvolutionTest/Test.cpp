@@ -204,15 +204,11 @@ BOOST_AUTO_TEST_CASE(quadratic_equation) {
   auto MutateGen = []() {
     auto gen = std::mt19937(0);
     auto rand = std::uniform_real_distribution<>();
-    return [gen, rand](double x) mutable { return x * (rand(gen) * 4 - 2); };
+    return [rand, gen](double x) mutable { return x * (rand(gen) * 4 - 2); };
   };
   auto Crossover = [](double x, double y) { return (x + y) / 2; };
   auto maxRand = 1000000;
-  auto Generator = [&]() -> double {
-    auto gen = std::mt19937(0);
-    auto rand = std::uniform_real_distribution<>();
-    return (rand(gen) - 0.5) * maxRand - 10000;
-  };
+  auto Generator = [&]() -> double { return maxRand; };
   auto opts = Evolution::EnvironmentOptions{};
 
   auto N = 100;
@@ -460,12 +456,17 @@ BOOST_AUTO_TEST_CASE(ctor_test) {
     DNA() = delete;
     DNA(int x, int y) : x(x), y(y) {}
   };
-  using Grade = DNA;
 
-  auto Evaluate = [](DNA x) { return x; };
-  auto Mutate = [](DNA x) { return x; };
-  auto Crossover = [](DNA x, DNA y) { return x; };
-  auto generator = []() -> DNA { return DNA(1, 2); };
+  struct Grade {
+    int x;
+    int y;
+    Grade() = delete;
+    Grade(int x, int y) : x(x), y(y) {}
+  };
+  auto Evaluate = [](DNA x) { return Grade{x.x, x.y}; };
+  auto Mutate = [](DNA x) { return DNA{x}; };
+  auto Crossover = [](DNA x, DNA y) { return DNA{x}; };
+  auto generator = []() -> DNA { return DNA{1, 2}; };
   auto opts = Evolution::EnvironmentOptions{};
   opts.isEvaluateLightweight = Utility::AutoOption::True();
   opts.isMutateLightweight = Utility::AutoOption::True();
@@ -504,10 +505,10 @@ BOOST_AUTO_TEST_CASE(copy_test) {
   sf.SetEvaluate(s3);
 
   auto orig = DNA{copyCounter};
-  auto generator = [&]() -> DNA { return DNA(orig); };
+  auto generator = [&]() -> DNA { return DNA{orig}; };
   auto Evaluate = [](DNA const &x) { return 0; };
-  auto Mutate1 = [](DNA const &x) { return DNA(x); };
-  auto Crossover1 = [](DNA const &x, DNA const &y) { return DNA(x); };
+  auto Mutate1 = [](DNA const &x) { return DNA{x}; };
+  auto Crossover1 = [](DNA const &x, DNA const &y) { return DNA{x}; };
   auto opts = Evolution::EnvironmentOptions{};
   opts.allowMoveFromPopulation = true;
   opts.isEvaluateLightweight = Utility::AutoOption::Auto();
