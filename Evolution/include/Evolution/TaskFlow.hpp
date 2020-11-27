@@ -372,11 +372,11 @@ private:
     // Should be preallocated to avoid refs invalidation
     assert(tbbFlow.inputNodes.capacity() > tbbFlow.inputNodes.size());
     tbbFlow.inputIndices.push_back(index);
-    tbbFlow.inputNodes.push_back(
-        InputNode(*tbbFlow.graphPtr, tbb::flow::concurrency::serial,
-                  [&, isReadOnly, state](DNA *dna) {
-                    return InputHelper(dna, isReadOnly, state);
-                  }));
+    tbbFlow.inputNodes.emplace_back(
+        *tbbFlow.graphPtr, tbb::flow::concurrency::serial,
+        [&, isReadOnly, state](DNA *dna) {
+          return InputHelper(dna, isReadOnly, state);
+        });
     assert(tbbFlow.inputIndices.size() == tbbFlow.inputNodes.size());
     return tbbFlow.inputNodes.back();
   }
@@ -439,7 +439,7 @@ private:
           return CrossoverHelper(iSrcs, isReadOnly0, isReadOnly1,
                                  isSwapArgumentsAllowed, state);
         }));
-    tbbFlow.crossoverJoinNodes.push_back(CrossoverJoinNode(*tbbFlow.graphPtr));
+    tbbFlow.crossoverJoinNodes.emplace_back(*tbbFlow.graphPtr);
     assert(tbbFlow.crossoverJoinNodes.size() == tbbFlow.crossoverNodes.size());
     if constexpr (isVariant<Node0>)
       std::visit(
