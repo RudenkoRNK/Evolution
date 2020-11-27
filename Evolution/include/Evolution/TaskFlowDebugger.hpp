@@ -70,6 +70,12 @@ public:
 #endif // !NDEBUG
   }
 
+  void Reset() {
+#ifndef NDEBUG
+    Clear();
+#endif // !NDEBUG
+  }
+
 private:
 #ifndef NDEBUG
   // Methods checking for tbb::flow and StateFlow synchronization

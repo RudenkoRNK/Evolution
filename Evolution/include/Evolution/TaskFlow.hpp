@@ -158,8 +158,13 @@ public:
         crossoverFTG(GeneratorTraits::WrapFunctionOrGenerator(Crossover)) {}
 
   void Run(Population &population, Grades &grades) {
+    auto finish = Utility::RAII([&]() noexcept {
+      MoveResultsFromBuffer(population, grades);
+      evaluateBuffer.clear(); // Hope this will not throw...
+    });
+    auto finishDebugger = Utility::RAII([&]() { debugger.Finish(); },
+                                        [&]() noexcept { debugger.Reset(); });
     RunTaskFlow(population);
-    MoveResultsFromBuffer(population, grades);
   }
 
   Grades EvaluatePopulation(Population const &population) {
@@ -658,16 +663,21 @@ private:
   void RunTaskFlow(Population &population) {
     assert(population.size() == GetPopulationSize());
     assert(tbbFlow.inputNodes.size() == tbbFlow.inputIndices.size());
-    evaluateBuffer.clear();
+    assert(evaluateBuffer.size() == 0);
 
     for (auto i = size_t{0}; i != tbbFlow.inputNodes.size(); ++i)
       tbbFlow.inputNodes[i].try_put(&population.at(tbbFlow.inputIndices[i]));
-    tbbFlow.graphPtr->wait_for_all();
-    debugger.Finish();
+    try {
+      tbbFlow.graphPtr->wait_for_all();
+    } catch (...) {
+      SetStateFlow(StateFlow(stateFlow));
+      tbbFlow.graphPtr->reset();
+      throw;
+    }
   }
 
   void MoveResultsFromBuffer(Population &population, Grades &grades) noexcept {
-    assert(evaluateBuffer.size() == tbbFlow.initialNonEvaluateIndices.size());
+    assert(evaluateBuffer.size() <= tbbFlow.initialNonEvaluateIndices.size());
     assert(population.size() == GetPopulationSize());
     assert(grades.size() == GetPopulationSize());
 
@@ -679,7 +689,6 @@ private:
       grades.at(index) = std::move(grade);
     }
   }
-
 };
 
 } // namespace Evolution
