@@ -151,7 +151,30 @@ private:
   Population GeneratePopulation(size_t size) {
     auto pop = Population{};
     pop.reserve(size);
-    std::generate_n(std::back_inserter(pop), size, DNAGenerator);
+    auto eHandler = Utility::ExceptionSaver{};
+    if constexpr (std::is_nothrow_default_constructible_v<DNA>) {
+      pop.resize(size);
+      std::generate(std::execution::par_unseq, pop.begin(), pop.end(),
+                    eHandler.Wrap(DNAGenerator));
+      eHandler.Rethrow();
+    } else {
+      auto popPar = tbb::concurrent_vector<std::pair<size_t, DNA>>{};
+      popPar.reserve(size);
+      auto indices = Utility::GetIndices(size);
+      std::for_each(std::execution::par_unseq, indices.begin(), indices.end(),
+                    eHandler.Wrap([&](size_t index) {
+                      popPar.emplace_back(index, DNAGenerator());
+                    }));
+      eHandler.Rethrow();
+      std::sort(popPar.begin(), popPar.end(),
+                [](auto const &lhs, auto const &rhs) {
+                  return lhs.first < rhs.first;
+                });
+      for (auto &&[index, dna] : popPar) {
+        assert(index == pop.size());
+        pop.push_back(std::move(dna));
+      }
+    }
     return pop;
   }
 
