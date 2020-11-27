@@ -245,6 +245,14 @@ public:
 
         auto const &[nextsB, nextsE] = GetChildStates(state);
         for (auto nextI = nextsB; nextI != nextsE; ++nextI) {
+          auto p1 = GetAnyParent(*nextI);
+          if (!visited.contains(p1))
+            continue;
+          if (IsCrossover(*nextI)) {
+            auto p2 = GetOtherParent(p1, *nextI);
+            if (!visited.contains(p2))
+              continue;
+          }
           if (visited.contains(*nextI) || !IsAddChild(*nextI))
             continue;
           nextGen.insert(*nextI);
