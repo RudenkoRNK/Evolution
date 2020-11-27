@@ -164,31 +164,35 @@ public:
 
   Grades EvaluatePopulation(Population const &population) {
     auto grades = Grades{};
-    if constexpr (std::is_default_constructible_v<Grade>) {
+    auto eHandler = Utility::ExceptionSaver{};
+    if constexpr (std::is_nothrow_default_constructible_v<Grade>) {
       grades.resize(population.size());
       std::transform(std::execution::par_unseq, population.begin(),
-                     population.end(), grades.begin(), [&](auto const &dna) {
+                     population.end(), grades.begin(),
+                     eHandler.Wrap([&](DNA const &dna) {
                        auto &&Evaluate = GetEvaluateFunction();
                        return Evaluate(dna);
-                     });
+                     }));
+      eHandler.Rethrow();
     } else {
       auto gradesPar = tbb::concurrent_vector<std::pair<size_t, Grade>>{};
       grades.reserve(population.size());
       gradesPar.reserve(population.size());
       auto indices = Utility::GetIndices(population.size());
       std::for_each(std::execution::par_unseq, indices.begin(), indices.end(),
-                    [&](auto index) {
+                    eHandler.Wrap([&](size_t index) {
                       auto &&Evaluate = GetEvaluateFunction();
                       gradesPar.emplace_back(index,
                                              Evaluate(population[index]));
-                    });
+                    }));
+      eHandler.Rethrow();
       std::sort(gradesPar.begin(), gradesPar.end(),
                 [](auto const &lhs, auto const &rhs) {
                   return lhs.first < rhs.first;
                 });
-      for (auto const &[index, grade] : gradesPar) {
+      for (auto &&[index, grade] : gradesPar) {
         assert(index == grades.size());
-        grades.push_back(grade);
+        grades.push_back(std::move(grade));
       }
     }
     return grades;
