@@ -228,17 +228,32 @@ private:
     return GeneratorTraits::GetFunction<CrossoverFG>(crossoverFTG);
   }
 
-  DNAPtr CopyHelper(DNA const &src) const { return DNAPtr(new DNA(src)); }
-  DNAPtr MoveHelper(DNA &&src) const { return DNAPtr(new DNA(std::move(src))); }
-  DNAPtr SaveHelper(DNA const &src) const { return CopyHelper(src); }
-  DNAPtr SaveHelper(DNA &&src) const { return MoveHelper(std::move(src)); }
+  DNAPtr CopyHelper(DNA const &src) const { return std::make_shared<DNA>(src); }
+  DNAPtr SaveHelper(DNA const &src, DNAPtr saveTo = DNAPtr{}) const {
+    if (saveTo) {
+      *saveTo = src;
+      return saveTo;
+    }
+    return CopyHelper(src);
+  }
+  DNAPtr SaveHelper(DNA &&src, DNAPtr saveTo = DNAPtr{}) const {
+    if (saveTo) {
+      *saveTo = std::move(src);
+      return saveTo;
+    }
+    return std::make_shared<DNA>(std::move(src));
+  }
+  DNAPtr SaveHelper(std::unique_ptr<DNA> src, DNAPtr saveTo = DNAPtr{}) const {
+    return std::shared_ptr<DNA>(std::move(src));
+  }
+
   DNAPtr InputHelper(DNA *iSrc, bool isReadOnly, State state) {
     debugger.Register(iSrc, state, isReadOnly, NodeType::Input);
     auto ret = DNAPtr{};
     if (isReadOnly)
       ret = CopyHelper(*iSrc);
     else
-      ret = MoveHelper(std::move(*iSrc));
+      ret = SaveHelper(std::move(*iSrc));
     debugger.Unregister(iSrc, state);
     debugger.RegisterOutput(ret.get(), state);
     return ret;
@@ -275,10 +290,8 @@ private:
     auto &&dst = MutatePtr(iSrc);
     if (!isPtrMove)
       ret = SaveHelper(std::move(dst));
-    else {
-      *iSrc = std::move(dst);
-      ret = iSrc;
-    }
+    else
+      ret = SaveHelper(std::move(dst), iSrc);
 
     debugger.Unregister(iSrcOrig.get(), state);
     debugger.RegisterOutput(ret.get(), state);
@@ -342,24 +355,17 @@ private:
     auto &&dst = CrossoverPtr(iSrc0, iSrc1);
     if (!isPtrMove0 && !isPtrMove1)
       ret = SaveHelper(std::move(dst));
-    else if (isPtrMove0 && !isPtrMove1) {
-      *iSrc0 = std::move(dst);
-      ret = iSrc0;
-    } else if (isPtrMove1 && !isPtrMove0) {
-      *iSrc1 = std::move(dst);
-      ret = iSrc1;
-    } else {
-      if constexpr (isCrossoverInPlaceFirst && !isCrossoverInPlaceSecond) {
-        *iSrc0 = std::move(dst);
-        ret = iSrc0;
-      } else if constexpr (isCrossoverInPlaceSecond &&
-                           !isCrossoverInPlaceFirst) {
-        *iSrc1 = std::move(dst);
-        ret = iSrc1;
-      } else {
-        *iSrc0 = std::move(dst);
-        ret = iSrc0;
-      }
+    else if (isPtrMove0 && !isPtrMove1)
+      ret = SaveHelper(std::move(dst), iSrc0);
+    else if (isPtrMove1 && !isPtrMove0)
+      ret = SaveHelper(std::move(dst), iSrc1);
+    else {
+      if constexpr (isCrossoverInPlaceFirst && !isCrossoverInPlaceSecond)
+        ret = SaveHelper(std::move(dst), iSrc0);
+      else if (isCrossoverInPlaceSecond && !isCrossoverInPlaceFirst)
+        ret = SaveHelper(std::move(dst), iSrc1);
+      else
+        ret = SaveHelper(std::move(dst), iSrc0);
     }
 
     debugger.Unregister(iSrcOrig0.get(), state);

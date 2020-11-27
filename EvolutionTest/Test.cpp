@@ -155,6 +155,9 @@ BOOST_AUTO_TEST_CASE(env_ctor_test2) {
   auto Mutate6 = [](std::string &x) -> std::string const & { return x; };
   auto Mutate7 = [](std::string & x) -> std::string && { return std::move(x); };
   auto Mutate8 = [](std::string &x) -> std::string { return x; };
+  auto Mutate9 = [](std::string &x) -> std::unique_ptr<std::string> {
+    return std::make_unique<std::string>(std::move(x));
+  };
 
   auto Evaluate = [](std::string const &x) {
     auto gen = std::mt19937(0);
@@ -186,6 +189,9 @@ BOOST_AUTO_TEST_CASE(env_ctor_test2) {
       .Run(size_t{3});
   Evolution::Environment(generator, Evaluate, Mutate8, Crossover, sf, opts)
       .Run(size_t{3});
+  Evolution::Environment(generator, Evaluate, Mutate9, Crossover, sf, opts)
+      .Run(size_t{3});
+  static_assert(Evolution::MutateFunctionOrGeneratorConcept<decltype(Mutate9)>);
 }
 
 BOOST_AUTO_TEST_CASE(quadratic_equation) {
