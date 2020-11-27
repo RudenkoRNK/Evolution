@@ -600,3 +600,192 @@ BOOST_AUTO_TEST_CASE(copy_test) {
   env8.Run(size_t{100});
   BOOST_TEST(copyCounter <= 200);
 }
+
+BOOST_AUTO_TEST_CASE(tbb_exception_test) {
+  using T = std::string;
+  using Ptr = std::shared_ptr<T>;
+  using InputNode = tbb::flow::function_node<T, Ptr>;
+  using EvaluateNode = tbb::flow::function_node<Ptr, int>;
+  using CrossoverNode = tbb::flow::function_node<std::tuple<Ptr, Ptr>, Ptr>;
+  using CrossoverJoinNode = tbb::flow::join_node<std::tuple<Ptr, Ptr>>;
+  tbb::flow::graph g;
+  InputNode i1(g, tbb::flow::concurrency::serial,
+               [](T x) { return std::make_shared<T>(std::move(x)); });
+  InputNode i2 = i1;
+  bool isEvaluateThrow = false;
+  bool isCrossoverThrow = false;
+  EvaluateNode e1(g, tbb::flow::concurrency::serial, [&](Ptr x) -> int {
+    if (isEvaluateThrow)
+      throw std::runtime_error("");
+    return x->size();
+  });
+  EvaluateNode e2 = e1;
+  CrossoverNode c1(g, tbb::flow::concurrency::serial,
+                   [&](std::tuple<Ptr, Ptr> x) {
+                     if (isCrossoverThrow)
+                       throw std::runtime_error("");
+                     return std::get<0>(x);
+                   });
+  CrossoverNode c2 = c1;
+  CrossoverJoinNode j1(g);
+  CrossoverJoinNode j2(g);
+  tbb::flow::make_edge(i1, input_port<0>(j1));
+  tbb::flow::make_edge(i2, input_port<1>(j1));
+  tbb::flow::make_edge(i1, input_port<0>(j2));
+  tbb::flow::make_edge(i2, input_port<1>(j2));
+  tbb::flow::make_edge(j1, c1);
+  tbb::flow::make_edge(j2, c2);
+  tbb::flow::make_edge(c1, e1);
+  tbb::flow::make_edge(c2, e2);
+  isEvaluateThrow = true;
+  isCrossoverThrow = false;
+  for (size_t i = 0; i != 10; ++i) {
+    try {
+      i1.try_put("1");
+      i2.try_put("2");
+      auto reset = Utility::RAII([]() {}, [&]() noexcept { g.reset(); });
+      g.wait_for_all();
+    } catch (...) {
+    }
+    isEvaluateThrow = false;
+    isCrossoverThrow = false;
+    i1.try_put("1");
+    i2.try_put("2");
+    g.wait_for_all();
+  }
+}
+
+BOOST_AUTO_TEST_CASE(exception_test) {
+  using Population = std::vector<std::string>;
+  class CustomException final : public std::runtime_error {
+  public:
+    CustomException() : std::runtime_error("") {}
+  };
+  // Fail with N>5
+  auto N = 5;
+  auto isThrow = std::vector<bool>(5);
+  auto population = Population{};
+  for (auto i = size_t{0}; i != N; ++i) {
+    population.push_back(std::string(1, static_cast<char>(i)));
+  }
+  auto sf = Evolution::GenerateStateFlow(N);
+  auto opts1 = Evolution::EnvironmentOptions{};
+  opts1.isEvaluateLightweight = Utility::AutoOption::Auto();
+  opts1.isMutateLightweight = Utility::AutoOption::Auto();
+  opts1.isCrossoverLightweight = Utility::AutoOption::Auto();
+  opts1.allowMoveFromPopulation = false;
+
+  auto opts2 = Evolution::EnvironmentOptions{};
+  opts2.isEvaluateLightweight = Utility::AutoOption::Auto();
+  opts2.isMutateLightweight = Utility::AutoOption::Auto();
+  opts2.isCrossoverLightweight = Utility::AutoOption::Auto();
+  opts2.allowMoveFromPopulation = true;
+
+  auto generator = [&]() -> std::string {
+    if (isThrow[0])
+      throw CustomException{};
+    return "generator";
+  };
+  auto Evaluate = [&](std::string const &x) {
+    if (isThrow[1])
+      throw CustomException{};
+    return x.size();
+  };
+  auto Mutate = [&](std::string const &x) -> std::string {
+    if (isThrow[2])
+      throw CustomException{};
+    return "mutate";
+  };
+  auto Crossover = [&](std::string const &x,
+                       std::string const &y) -> std::string {
+    if (isThrow[3])
+      throw CustomException{};
+    return "crossover";
+  };
+  auto Sort = [&](Population const &, std::vector<size_t> const &grades) {
+    if (isThrow[4])
+      throw CustomException{};
+    auto permutation = Utility::GetIndices(grades.size());
+    std::sort(permutation.begin(), permutation.end(),
+              [&](size_t index0, size_t index1) {
+                return grades[index0] > grades[index1];
+              });
+    return permutation;
+  };
+  auto Cycle = [&](auto &&callable, std::vector<bool> thrown) {
+    isThrow = std::vector<bool>(5);
+    for (auto i = size_t{0}, e = isThrow.size(); i != e; ++i) {
+      isThrow.at(i) = true;
+      auto catched = false;
+      try {
+        callable();
+      } catch (CustomException &) {
+        catched = true;
+      }
+      BOOST_TEST(catched == thrown.at(i));
+      isThrow.at(i) = false;
+      callable();
+    }
+  };
+
+  auto CheckPopulation = [&](Population const &pop,
+                             std::vector<std::string> const &allowedWords,
+                             bool isAllowOrigin) {
+    for (auto i = size_t{0}; i != pop.size(); ++i) {
+      auto const &e = pop[i];
+      auto found = false;
+      found |= std::find(allowedWords.begin(), allowedWords.end(), e) !=
+               allowedWords.end();
+      if (isAllowOrigin)
+        found |= population[i] == e;
+      BOOST_TEST(found);
+    }
+  };
+
+  Cycle(
+      [&]() {
+        Evolution::Environment(generator, Evaluate, Mutate, Crossover, sf,
+                               opts1, Sort);
+      },
+      {true, true, true, true, true});
+  Cycle(
+      [&]() {
+        Evolution::Environment(generator, Evaluate, Mutate, Crossover, sf,
+                               opts2, Sort);
+      },
+      {true, true, true, true, true});
+
+  auto env1 = Evolution::Environment(generator, Evaluate, Mutate, Crossover, sf,
+                                     opts1, Sort);
+  auto env2 = Evolution::Environment(generator, Evaluate, Mutate, Crossover, sf,
+                                     opts2, Sort);
+
+  Cycle([&]() { env1.SetPopulation(Population(population)); },
+        {false, true, false, false, true});
+  Cycle([&]() { env2.SetPopulation(Population(population)); },
+        {false, true, false, false, true});
+
+  auto isCatch = std::vector<bool>{false, true, true, true, true};
+  for (auto it = size_t{0}, e = isThrow.size(); it != e; ++it) {
+    env1.SetPopulation(Population(population));
+    isThrow[it] = true;
+    auto isCatched = false;
+    try {
+      env1.Run();
+    } catch (CustomException &) {
+      isCatched = true;
+    }
+    BOOST_TEST(isCatched == isCatch[it]);
+    auto const &pop = env1.GetPopulation();
+    if (it == 0 || it == 4)
+      CheckPopulation(pop, {"mutate", "crossover"}, true);
+    else if (it == 1)
+      CheckPopulation(pop, {}, true);
+    else if (it == 2)
+      CheckPopulation(pop, {"crossover"}, true);
+    else if (it == 3)
+      CheckPopulation(pop, {"mutate"}, true);
+    isThrow[it] = false;
+    env1.Run();
+  }
+}
