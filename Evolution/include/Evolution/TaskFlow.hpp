@@ -18,6 +18,13 @@
 #include <vector>
 
 namespace Evolution {
+struct EnvironmentOptions {
+  Utility::AutoOption isEvaluateLightweight;
+  Utility::AutoOption isMutateLightweight;
+  Utility::AutoOption isCrossoverLightweight;
+  bool allowMoveFromPopulation = true;
+};
+
 template <EvaluateFunctionOrGeneratorConcept EvaluateFG,
           MutateFunctionOrGeneratorConcept MutateFG,
           CrossoverFunctionOrGeneratorConcept CrossoverFG>
@@ -131,6 +138,7 @@ private:
     bool isMutateLightweight;
     bool isCrossoverLightweight;
   };
+  EnvironmentOptions options;
   TBBFlow tbbFlow;
   StateFlow stateFlow;
   TaskFlowDebugger<DNA> debugger;
@@ -142,10 +150,8 @@ private:
 public:
   TaskFlow(EvaluateFG const &Evaluate, MutateFG const &Mutate,
            CrossoverFG const &Crossover, StateFlow const &stateFlow,
-           bool isEvaluateLightweight = false, bool isMutateLightweight = false,
-           bool isCrossoverLightweight = false)
-      : tbbFlow(GenerateTBBFlow(stateFlow, isEvaluateLightweight,
-                                isMutateLightweight, isCrossoverLightweight)),
+           EnvironmentOptions const &options = EnvironmentOptions{})
+      : options(options), tbbFlow(GenerateTBBFlow(stateFlow, options)),
         stateFlow(stateFlow), debugger(this->stateFlow),
         evaluateFTG(GeneratorTraits::WrapFunctionOrGenerator(Evaluate)),
         mutateFTG(GeneratorTraits::WrapFunctionOrGenerator(Mutate)),
@@ -190,9 +196,7 @@ public:
 
   // Strong exception guarantee
   void SetStateFlow(StateFlow &&stateFlow) {
-    auto tbbFlow_ = GenerateTBBFlow(stateFlow, tbbFlow.isEvaluateLightweight,
-                                    tbbFlow.isMutateLightweight,
-                                    tbbFlow.isCrossoverLightweight);
+    auto tbbFlow_ = GenerateTBBFlow(stateFlow, options);
     tbbFlow.inputNodes.clear();
     tbbFlow.evaluateNodes.clear();
     tbbFlow.mutateNodes.clear();
@@ -203,30 +207,6 @@ public:
   }
 
   StateFlow const &GetStateFlow() const noexcept { return stateFlow; }
-
-  bool static IsEvaluateLightweight(EvaluateFG const &Evaluate,
-                                    DNA const &dna) {
-    return IsFGLightweight(Evaluate, dna);
-  }
-  bool static IsMutateLightweight(MutateFG const &Mutate, DNA const &dna) {
-    if constexpr (!isMutateInPlace)
-      return IsFGLightweight(Mutate, dna);
-    auto dna_ = DNA(dna);
-    if constexpr (isMutateMovable)
-      return IsFGLightweight(Mutate, std::move(dna_));
-    else
-      return IsFGLightweight(Mutate, dna_);
-  }
-  bool static IsCrossoverLightweight(CrossoverFG const &Crossover,
-                                     DNA const &dna0, DNA const &dna1) {
-    if constexpr (!isCrossoverInPlaceFirst)
-      return IsCrossoverLightweight_(Crossover, dna0, dna1);
-    auto dna0_ = DNA(dna0);
-    if constexpr (!isCrossoverMovableFirst)
-      return IsCrossoverLightweight_(Crossover, dna0_, dna1);
-    else
-      return IsCrossoverLightweight_(Crossover, std::move(dna0_), dna1);
-  }
 
 private:
   EvaluateFunction &GetEvaluateFunction() {
@@ -490,8 +470,7 @@ private:
   }
 
   TBBFlow GenerateTBBFlow(StateFlow const &stateFlow,
-                          bool isEvaluateLightweight, bool isMutateLightweight,
-                          bool isCrossoverLightweight) {
+                          EnvironmentOptions const &options) {
     assert(!stateFlow.IsNotReady());
     using InputNodeRef = std::reference_wrapper<InputNode>;
     using MutateNodeRef = std::reference_wrapper<MutateNode>;
@@ -506,9 +485,9 @@ private:
     tbbFlow.graphPtr =
         std::unique_ptr<tbb::flow::graph>(new tbb::flow::graph{});
 
-    tbbFlow.isEvaluateLightweight = isEvaluateLightweight;
-    tbbFlow.isMutateLightweight = isMutateLightweight;
-    tbbFlow.isCrossoverLightweight = isCrossoverLightweight;
+    tbbFlow.isEvaluateLightweight = options.isEvaluateLightweight.isTrue();
+    tbbFlow.isMutateLightweight = options.isMutateLightweight.isTrue();
+    tbbFlow.isCrossoverLightweight = options.isCrossoverLightweight.isTrue();
 
     tbbFlow.inputIndices.reserve(stateFlow.GetInitialStates().size());
     tbbFlow.inputNodes.reserve(stateFlow.GetInitialStates().size());
@@ -561,7 +540,8 @@ private:
         loneInitials.insert(state);
         return;
       }
-      auto isReadOnly = stateFlow.IsEvaluate(state);
+      auto isReadOnly =
+          stateFlow.IsEvaluate(state) || !options.allowMoveFromPopulation;
       auto &&node =
           AddInput(tbbFlow, stateFlow.GetIndex(state), isReadOnly, state);
       nodes.emplace(state, NodeRef(InputNodeIndex, std::ref(node)));
@@ -696,32 +676,6 @@ private:
     }
   }
 
-  template <typename DNAFirst>
-  bool static IsCrossoverLightweight_(CrossoverFG const &Crossover,
-                                      DNAFirst &&dna0, DNA const &dna1) {
-    if constexpr (!isCrossoverInPlaceSecond)
-      return IsFGLightweight(Crossover, std::forward<DNAFirst>(dna0), dna1);
-    auto dna1_ = DNA(dna1);
-    if constexpr (isCrossoverMovableSecond)
-      return IsFGLightweight(Crossover, std::forward<DNAFirst>(dna0),
-                             std::move(dna1_));
-    else
-      return IsFGLightweight(Crossover, std::forward<DNAFirst>(dna0), dna1_);
-  }
-
-  template <typename FG, typename... Args>
-  bool static IsFGLightweight(FG const &Func, Args &&... args) {
-    auto constexpr static maxLightweightClocks = size_t{1000000};
-    auto FG_ = std::function(Func);
-    auto &&Func_ = GeneratorTraits::GetFunction<decltype(Func)>(FG_);
-    auto freq = 2; // clocks per nanosecond
-    auto time = Utility::Benchmark(std::forward<decltype(Func_)>(Func_),
-                                   std::forward<Args>(args)...);
-    auto nanosecs =
-        std::chrono::duration_cast<std::chrono::nanoseconds>(time).count();
-    auto clocks = freq * nanosecs;
-    return clocks < maxLightweightClocks;
-  }
 };
 
 } // namespace Evolution

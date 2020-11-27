@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Evolution/Concepts.hpp"
 #include "Evolution/StateFlow.hpp"
 
 namespace Evolution {
@@ -82,4 +83,19 @@ StateFlow static GenerateStateFlow(size_t populationSize) {
   assert(!sf.IsNotReady());
   return sf;
 }
+
+template <typename FG, typename... Args>
+bool static IsFGLightweight(FG const &Func, Args &&... args) {
+  auto constexpr static maxLightweightClocks = size_t{1000000};
+  auto FG_ = std::function(Func);
+  auto &&Func_ = GeneratorTraits::GetFunction<decltype(Func)>(FG_);
+  auto freq = 2; // clocks per nanosecond
+  auto time = Utility::Benchmark(std::forward<decltype(Func_)>(Func_),
+                                 std::forward<Args>(args)...);
+  auto nanosecs =
+      std::chrono::duration_cast<std::chrono::nanoseconds>(time).count();
+  auto clocks = freq * nanosecs;
+  return clocks < maxLightweightClocks;
+}
+
 } // namespace Evolution

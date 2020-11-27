@@ -2,6 +2,7 @@
 #include "Evolution/Concepts.hpp"
 #include "Evolution/StateFlow.hpp"
 #include "Evolution/TaskFlow.hpp"
+#include "Evolution/Utils.hpp"
 #include "Utility/Misc.hpp"
 
 namespace Evolution {
@@ -35,17 +36,12 @@ public:
   Environment(DNAGeneratorFunction const &DNAGenerator,
               EvaluateFG const &Evaluate, MutateFG const &Mutate,
               CrossoverFG const &Crossover, StateFlow const &stateFlow,
-              bool isBenchmarkFunctions = false,
+              EnvironmentOptions const &options = EnvironmentOptions{},
               SortPopulationFunction const &SortPopulation_ = GetSortFunction())
       : DNAGenerator(DNAGenerator), SortPopulation_(SortPopulation_),
         taskFlow(Evaluate, Mutate, Crossover, stateFlow,
-                 isBenchmarkFunctions && TaskFlowInst::IsEvaluateLightweight(
-                                             Evaluate, this->DNAGenerator()),
-                 isBenchmarkFunctions && TaskFlowInst::IsMutateLightweight(
-                                             Mutate, this->DNAGenerator()),
-                 isBenchmarkFunctions && TaskFlowInst::IsCrossoverLightweight(
-                                             Crossover, this->DNAGenerator(),
-                                             this->DNAGenerator())) {
+                 ResolveAutoOptions(DNAGenerator, Evaluate, Mutate, Crossover,
+                                    options)) {
     RegeneratePopulation();
   }
 
@@ -112,6 +108,35 @@ public:
   }
 
 private:
+  static EnvironmentOptions
+  ResolveAutoOptions(DNAGeneratorFunction const &DNAGenerator,
+                     EvaluateFG const &Evaluate, MutateFG const &Mutate,
+                     CrossoverFG const &Crossover,
+                     EnvironmentOptions const &opts) {
+    auto options = opts;
+    auto dna0 = std::optional<DNA>{};
+    auto dna1 = std::optional<DNA>{};
+
+    if (opts.isEvaluateLightweight.isAuto()) {
+      if (!dna0)
+        dna0 = DNAGenerator();
+      options.isEvaluateLightweight = IsFGLightweight(Evaluate, dna0.value());
+    }
+    if (opts.isMutateLightweight.isAuto()) {
+      if (!dna0)
+        dna0 = DNAGenerator();
+      options.isMutateLightweight =
+          IsFGLightweight(Mutate, std::move(dna0.value()));
+    }
+    if (opts.isCrossoverLightweight.isAuto()) {
+      dna0 = DNAGenerator();
+      dna1 = DNAGenerator();
+      options.isCrossoverLightweight = IsFGLightweight(
+          Crossover, std::move(dna0.value()), std::move(dna1.value()));
+    }
+    return options;
+  }
+
   void ReservePopulation(size_t size) {
     population.reserve(size);
     grades.reserve(size);
