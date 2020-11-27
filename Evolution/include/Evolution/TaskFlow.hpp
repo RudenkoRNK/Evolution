@@ -59,7 +59,6 @@ public:
   using Grades = std::vector<Grade>;
 
 private:
-
   // Check that arguments and return values of functions are of type DNA
   static_assert(std::is_same_v<DNA, std::remove_cvref_t<EvaluateArg>>);
   static_assert(std::is_same_v<DNA, std::remove_cvref_t<MutateReturn>>);
@@ -244,10 +243,10 @@ private:
   DNAPtr MoveHelper(DNA &&src) const { return DNAPtr(new DNA(std::move(src))); }
   DNAPtr SaveHelper(DNA const &src) const { return CopyHelper(src); }
   DNAPtr SaveHelper(DNA &&src) const { return MoveHelper(std::move(src)); }
-  DNAPtr InputHelper(DNA *iSrc, bool isCopy, State state) {
-    debugger.Register(iSrc, state, isCopy, NodeType::Input);
+  DNAPtr InputHelper(DNA *iSrc, bool isReadOnly, State state) {
+    debugger.Register(iSrc, state, isReadOnly, NodeType::Input);
     auto ret = DNAPtr{};
-    if (isCopy)
+    if (isReadOnly)
       ret = CopyHelper(*iSrc);
     else
       ret = MoveHelper(std::move(*iSrc));
@@ -263,22 +262,22 @@ private:
     auto &&grade = Evaluate(*iSrc);
     evaluateBuffer.emplace_back(iSrc, std::move(grade));
   }
-  DNAPtr MutateHelper(DNAPtr iSrc, bool isCopy, State state) {
+  DNAPtr MutateHelper(DNAPtr iSrc, bool isReadOnly, State state) {
     auto iSrcOrig = iSrc;
-    debugger.Register(iSrcOrig.get(), state, isCopy, NodeType::Mutate);
+    debugger.Register(iSrcOrig.get(), state, isReadOnly, NodeType::Mutate);
 
-    auto isCopyHelp = isMutateInPlace && isCopy;
-    auto isPtrMove = !isCopy || isCopyHelp;
+    auto isCopyHelp = isMutateInPlace && isReadOnly;
+    auto isPtrMove = !isReadOnly || isCopyHelp;
     if (isCopyHelp)
       iSrc = CopyHelper(*iSrc);
 
     auto &&Mutate = GetMutateFunction();
     auto MutatePtr = [&](DNAPtr iSrc) -> decltype(auto) {
       if constexpr (isMutateMovable) {
-        assert(!isCopy || iSrcOrig != iSrc);
+        assert(!isReadOnly || iSrcOrig != iSrc);
         return Mutate(std::move(*iSrc));
       } else {
-        assert(!isCopy || iSrcOrig != iSrc || !isMutateInPlace);
+        assert(!isReadOnly || iSrcOrig != iSrc || !isMutateInPlace);
         return Mutate(*iSrc);
       }
     };
@@ -296,29 +295,29 @@ private:
     debugger.RegisterOutput(ret.get(), state);
     return ret;
   }
-  DNAPtr CrossoverHelper(std::tuple<DNAPtr, DNAPtr> iSrcs, bool isCopy0,
-                         bool isCopy1, bool isSwapArgumentsAllowed,
+  DNAPtr CrossoverHelper(std::tuple<DNAPtr, DNAPtr> iSrcs, bool isReadOnly0,
+                         bool isReadOnly1, bool isSwapArgumentsAllowed,
                          State state) {
     auto [iSrc0, iSrc1] = iSrcs;
     auto [iSrcOrig0, iSrcOrig1] = iSrcs;
-    debugger.Register(iSrcOrig0.get(), state, isCopy0, NodeType::Crossover);
-    debugger.Register(iSrcOrig1.get(), state, isCopy1, NodeType::Crossover);
+    debugger.Register(iSrcOrig0.get(), state, isReadOnly0, NodeType::Crossover);
+    debugger.Register(iSrcOrig1.get(), state, isReadOnly1, NodeType::Crossover);
 
     auto isSwap = ((isCrossoverInPlaceFirst && !isCrossoverInPlaceSecond &&
-                    isCopy0 && !isCopy1) ||
+                    isReadOnly0 && !isReadOnly1) ||
                    (isCrossoverInPlaceSecond && !isCrossoverInPlaceFirst &&
-                    isCopy1 && !isCopy0)) &&
+                    isReadOnly1 && !isReadOnly0)) &&
                   isSwapArgumentsAllowed;
     if (isSwap) {
       std::swap(iSrc0, iSrc1);
       std::swap(iSrcOrig0, iSrcOrig1);
-      std::swap(isCopy0, isCopy1);
+      std::swap(isReadOnly0, isReadOnly1);
     }
 
-    auto isCopyHelp0 = isCrossoverInPlaceFirst && isCopy0;
-    auto isCopyHelp1 = isCrossoverInPlaceSecond && isCopy1;
-    auto isPtrMove0 = !isCopy0 || isCopyHelp0;
-    auto isPtrMove1 = !isCopy1 || isCopyHelp1;
+    auto isCopyHelp0 = isCrossoverInPlaceFirst && isReadOnly0;
+    auto isCopyHelp1 = isCrossoverInPlaceSecond && isReadOnly1;
+    auto isPtrMove0 = !isReadOnly0 || isCopyHelp0;
+    auto isPtrMove1 = !isReadOnly1 || isCopyHelp1;
 
     if (isCopyHelp0)
       iSrc0 = CopyHelper(*iSrc0);
@@ -328,21 +327,23 @@ private:
     auto &&Crossover = GetCrossoverFunction();
     auto CrossoverPtr = [&](DNAPtr iSrc0, DNAPtr iSrc1) -> decltype(auto) {
       if constexpr (isCrossoverMovableFirst) {
-        assert(!isCopy0 || iSrcOrig0 != iSrc0);
+        assert(!isReadOnly0 || iSrcOrig0 != iSrc0);
         if constexpr (isCrossoverMovableSecond) {
-          assert(!isCopy1 || iSrcOrig1 != iSrc1);
+          assert(!isReadOnly1 || iSrcOrig1 != iSrc1);
           return Crossover(std::move(*iSrc0), std::move(*iSrc1));
         } else {
-          assert(!isCopy1 || iSrcOrig1 != iSrc1 || !isCrossoverInPlaceSecond);
+          assert(!isReadOnly1 || iSrcOrig1 != iSrc1 ||
+                 !isCrossoverInPlaceSecond);
           return Crossover(std::move(*iSrc0), *iSrc1);
         }
       } else {
-        assert(!isCopy0 || iSrcOrig0 != iSrc0 || !isCrossoverInPlaceFirst);
+        assert(!isReadOnly0 || iSrcOrig0 != iSrc0 || !isCrossoverInPlaceFirst);
         if constexpr (isCrossoverMovableSecond) {
-          assert(!isCopy1 || iSrcOrig1 != iSrc1);
+          assert(!isReadOnly1 || iSrcOrig1 != iSrc1);
           return Crossover(*iSrc0, std::move(*iSrc1));
         } else {
-          assert(!isCopy1 || iSrcOrig1 != iSrc1 || !isCrossoverInPlaceSecond);
+          assert(!isReadOnly1 || iSrcOrig1 != iSrc1 ||
+                 !isCrossoverInPlaceSecond);
           return Crossover(*iSrc0, *iSrc1);
         }
       }
@@ -386,15 +387,15 @@ private:
       return Node(DefaultPolicyIndex, std::forward<Args>(args)...);
   }
 
-  InputNode &AddInput(TBBFlow &tbbFlow, size_t index, bool isCopy,
+  InputNode &AddInput(TBBFlow &tbbFlow, size_t index, bool isReadOnly,
                       State state) {
     // Should be preallocated to avoid refs invalidation
     assert(tbbFlow.inputNodes.capacity() > tbbFlow.inputNodes.size());
     tbbFlow.inputIndices.push_back(index);
     tbbFlow.inputNodes.push_back(
         InputNode(*tbbFlow.graphPtr, tbb::flow::concurrency::serial,
-                  [&, isCopy, state](DNA *dna) {
-                    return InputHelper(dna, isCopy, state);
+                  [&, isReadOnly, state](DNA *dna) {
+                    return InputHelper(dna, isReadOnly, state);
                   }));
     assert(tbbFlow.inputIndices.size() == tbbFlow.inputNodes.size());
     return tbbFlow.inputNodes.back();
@@ -422,14 +423,14 @@ private:
     return tbbFlow.evaluateNodes.back();
   }
   template <typename Node>
-  MutateNode &AddMutate(TBBFlow &tbbFlow, Node &predecessor, bool isCopy,
+  MutateNode &AddMutate(TBBFlow &tbbFlow, Node &predecessor, bool isReadOnly,
                         State state) {
     // Should be preallocated to avoid refs invalidation
     assert(tbbFlow.mutateNodes.capacity() > tbbFlow.mutateNodes.size());
     tbbFlow.mutateNodes.push_back(MakeNode<MutateNode>(
         tbbFlow.isMutateLightweight, *tbbFlow.graphPtr,
-        tbb::flow::concurrency::serial, [&, isCopy, state](DNAPtr iSrc) {
-          return MutateHelper(iSrc, isCopy, state);
+        tbb::flow::concurrency::serial, [&, isReadOnly, state](DNAPtr iSrc) {
+          return MutateHelper(iSrc, isReadOnly, state);
         }));
     if constexpr (isVariant<Node>)
       std::visit(
@@ -445,16 +446,17 @@ private:
   }
   template <typename Node0, typename Node1>
   CrossoverNode &AddCrossover(TBBFlow &tbbFlow, Node0 &predecessor0,
-                              Node1 &predecessor1, bool isCopy0, bool isCopy1,
-                              bool isSwapArgumentsAllowed, State state) {
+                              Node1 &predecessor1, bool isReadOnly0,
+                              bool isReadOnly1, bool isSwapArgumentsAllowed,
+                              State state) {
     // Should be preallocated to avoid refs invalidation
     assert(tbbFlow.crossoverNodes.capacity() > tbbFlow.crossoverNodes.size());
     tbbFlow.crossoverNodes.push_back(MakeNode<CrossoverNode>(
         tbbFlow.isCrossoverLightweight, *tbbFlow.graphPtr,
         tbb::flow::concurrency::serial,
-        [&, isCopy0, isCopy1, isSwapArgumentsAllowed,
+        [&, isReadOnly0, isReadOnly1, isSwapArgumentsAllowed,
          state](std::tuple<DNAPtr, DNAPtr> iSrcs) {
-          return CrossoverHelper(iSrcs, isCopy0, isCopy1,
+          return CrossoverHelper(iSrcs, isReadOnly0, isReadOnly1,
                                  isSwapArgumentsAllowed, state);
         }));
     tbbFlow.crossoverJoinNodes.push_back(CrossoverJoinNode(*tbbFlow.graphPtr));
@@ -559,8 +561,9 @@ private:
         loneInitials.insert(state);
         return;
       }
-      auto isCopy = stateFlow.IsEvaluate(state);
-      auto &&node = AddInput(tbbFlow, stateFlow.GetIndex(state), isCopy, state);
+      auto isReadOnly = stateFlow.IsEvaluate(state);
+      auto &&node =
+          AddInput(tbbFlow, stateFlow.GetIndex(state), isReadOnly, state);
       nodes.emplace(state, NodeRef(InputNodeIndex, std::ref(node)));
     };
     auto ResolveEvaluate = [&](State state) {
