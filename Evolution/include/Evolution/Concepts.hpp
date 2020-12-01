@@ -1,4 +1,5 @@
 #pragma once
+#define BOOST_ALLOW_DEPRECATED_HEADERS
 #include "Utility/TypeTraits.hpp"
 #include <concepts>
 

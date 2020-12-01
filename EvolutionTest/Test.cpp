@@ -354,28 +354,24 @@ BOOST_AUTO_TEST_CASE(grades_preserve_test) {
 }
 
 BOOST_AUTO_TEST_CASE(random_flow_test) {
-  auto Evaluate = [](double x) {
-    auto static thread_local gen = std::mt19937(412);
+  auto thread_local gen = std::mt19937(412);
+  auto Evaluate = [&](double x) {
     auto rand = std::uniform_real_distribution<>();
     return rand(gen);
   };
-  auto Mutate = [](double x) {
-    auto static thread_local gen = std::mt19937(433);
+  auto Mutate = [&](double x) {
     auto rand = std::uniform_real_distribution<>();
     return rand(gen);
   };
-  auto Crossover = [](double x, double y) {
-    auto static thread_local gen = std::mt19937(444);
+  auto Crossover = [&](double x, double y) {
     auto rand = std::uniform_real_distribution<>();
     return rand(gen);
   };
-  auto Generator = []() -> double {
-    auto static thread_local gen = std::mt19937(100);
+  auto Generator = [&]() -> double {
     auto rand = std::uniform_real_distribution<>();
     return rand(gen);
   };
 
-  auto gen = std::mt19937(500);
   auto rand = std::uniform_int_distribution<>();
   auto nextInd = 0;
   auto GetRandomState = [&](Evolution::StateFlow &sf) {
@@ -617,7 +613,7 @@ BOOST_AUTO_TEST_CASE(tbb_exception_test) {
   EvaluateNode e1(g, tbb::flow::concurrency::serial, [&](Ptr x) -> int {
     if (isEvaluateThrow)
       throw std::runtime_error("");
-    return x->size();
+    return static_cast<int>(x->size());
   });
   EvaluateNode e2 = e1;
   CrossoverNode c1(g, tbb::flow::concurrency::serial,
