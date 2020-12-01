@@ -116,6 +116,10 @@ private:
     auto options = opts;
     auto dna0 = std::optional<DNA>{};
     auto dna1 = std::optional<DNA>{};
+    using MutateF = typename GeneratorTraits::Function<MutateFG>;
+    using MutateCT = typename Utility::CallableTraits<MutateF>;
+    using CrossoverF = typename GeneratorTraits::Function<CrossoverFG>;
+    using CrossoverCT = typename Utility::CallableTraits<CrossoverF>;
 
     if (opts.isEvaluateLightweight.isAuto()) {
       if (!dna0)
@@ -126,13 +130,14 @@ private:
       if (!dna0)
         dna0 = DNAGenerator();
       options.isMutateLightweight =
-          IsFGLightweight(Mutate, std::move(dna0.value()));
+          IsFGLightweight(Mutate, MutateCT::Forward<1>(dna0.value()));
     }
     if (opts.isCrossoverLightweight.isAuto()) {
       dna0 = DNAGenerator();
       dna1 = DNAGenerator();
-      options.isCrossoverLightweight = IsFGLightweight(
-          Crossover, std::move(dna0.value()), std::move(dna1.value()));
+      options.isCrossoverLightweight =
+          IsFGLightweight(Crossover, CrossoverCT::Forward<1>(dna0.value()),
+                          CrossoverCT::Forward<2>(dna1.value()));
     }
     return options;
   }
