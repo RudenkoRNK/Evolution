@@ -218,11 +218,7 @@ private:
     static_assert(std::is_arithmetic_v<Grade>,
                   "For custom Grades provide custom SortPopulation function");
     return [](Population const &population, Grades const &grades) {
-      auto permutation = Utility::GetIndices(grades.size());
-      std::sort(permutation.begin(), permutation.end(),
-                [&](size_t index0, size_t index1) {
-                  return grades[index0] > grades[index1];
-                });
+      auto permutation = Utility::GetSortPermutation(grades, std::greater<>{});
       return permutation;
     };
   }
