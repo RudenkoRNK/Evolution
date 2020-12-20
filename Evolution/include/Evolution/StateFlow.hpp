@@ -8,6 +8,8 @@
 #include <utility>
 #define NOMINMAX
 
+#include <concepts>
+
 namespace Evolution {
 class StateFlow final {
 private:

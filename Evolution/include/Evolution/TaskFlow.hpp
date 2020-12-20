@@ -142,10 +142,10 @@ private:
   TBBFlow tbbFlow;
   StateFlow stateFlow;
   TaskFlowDebugger<DNA> debugger;
-  tbb::concurrent_vector<std::pair<DNAPtr, Grade>> evaluateBuffer;
   EvaluateFTG evaluateFTG;
   MutateFTG mutateFTG;
   CrossoverFTG crossoverFTG;
+  tbb::concurrent_vector<std::pair<DNAPtr, Grade>> evaluateBuffer;
 
 public:
   TaskFlow(EvaluateFG const &Evaluate, MutateFG const &Mutate,
@@ -156,6 +156,35 @@ public:
         evaluateFTG(GeneratorTraits::WrapFunctionOrGenerator(Evaluate)),
         mutateFTG(GeneratorTraits::WrapFunctionOrGenerator(Mutate)),
         crossoverFTG(GeneratorTraits::WrapFunctionOrGenerator(Crossover)) {}
+
+  // TBBFlow will have references to previous *this otherwise
+  TaskFlow(TaskFlow &&other) = delete;
+  TaskFlow &operator=(TaskFlow &&other) = delete;
+
+  TaskFlow(TaskFlow const &other)
+      : options(other.options),
+        tbbFlow(GenerateTBBFlow(other.stateFlow, other.options)),
+        stateFlow(other.stateFlow), debugger(this->stateFlow),
+        evaluateFTG(other.evaluateFTG), mutateFTG(other.mutateFTG),
+        crossoverFTG(other.crossoverFTG), evaluateBuffer(other.evaluateBuffer) {
+  }
+  TaskFlow &operator=(TaskFlow const &other) {
+    if (other == *this)
+      return;
+    auto options_ = other.options;
+    auto debugger_ = other.debugger;
+    auto evaluateFTG_ = other.evaluateFTG;
+    auto mutateFTG_ = other.mutateFTG;
+    auto crossoverFTG_ = other.crossoverFTG;
+    auto evaluateBuffer_ = other.evaluateBuffer;
+    SetStateFlow(other.stateFlow);
+    options = std::move(options_);
+    debugger = std::move(debugger_);
+    evaluateFTG = std::move(evaluateFTG_);
+    mutateFTG = std::move(mutateFTG_);
+    crossoverFTG = std::move(crossoverFTG_);
+    evaluateBuffer = std::move(evaluateBuffer_);
+  }
 
   void Run(Population &population, Grades &grades) {
     auto finish = Utility::RAII([&]() noexcept {
@@ -261,7 +290,6 @@ private:
   void EvaluateHelper(DNAPtr iSrc, State state) {
     debugger.Register(iSrc.get(), state, /*isReadOnly=*/true,
                       NodeType::Evaluate);
-
     auto &&Evaluate = GetEvaluateFunction();
     auto &&grade = Evaluate(*iSrc);
     evaluateBuffer.emplace_back(iSrc, std::move(grade));

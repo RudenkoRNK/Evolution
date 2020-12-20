@@ -1,7 +1,7 @@
 #pragma once
 #include "Evolution/Concepts.hpp"
 #include "Evolution/StateFlow.hpp"
-#include "Evolution/TaskFlow.hpp"
+#include "Evolution/TaskFlowContainer.hpp"
 #include "Evolution/Utils.hpp"
 #include "Utility/Misc.hpp"
 
@@ -12,7 +12,9 @@ template <EvaluateFunctionOrGeneratorConcept EvaluateFG,
           CrossoverFunctionOrGeneratorConcept CrossoverFG>
 class Environment final {
 private:
-  using TaskFlowInst = TaskFlow<EvaluateFG, MutateFG, CrossoverFG>;
+  using TaskFlowContainerInst =
+      typename TaskFlowContainer<EvaluateFG, MutateFG, CrossoverFG>;
+  using TaskFlowInst = typename TaskFlowContainerInst::TaskFlowInst;
 
 public:
   using DNA = typename TaskFlowInst::DNA;
@@ -28,7 +30,7 @@ private:
   using DNAGeneratorFunction = std::function<DNA()>;
   DNAGeneratorFunction DNAGenerator;
   SortPopulationFunction SortPopulation_;
-  TaskFlowInst taskFlow;
+  TaskFlowContainerInst taskFlow;
   Population population;
   Grades grades;
 
@@ -49,24 +51,22 @@ public:
   Grades const &GetGrades() const { return grades; }
 
   void Run(size_t n = 1) {
-    if (n < 1)
-      return;
-    Run([&](Population const &, Grades const &) { return --n > 0; });
+    Run([&](Population const &, Grades const &) { return n-- > 0; });
   }
 
   template <typename GenerationActionFunctionT>
   void Run(GenerationActionFunctionT &&GenerationAction) {
     static_assert(std::is_convertible_v<GenerationActionFunctionT,
                                         GenerationActionFunction>);
-    do {
+    while (GenerationAction(population, grades)) {
       assert(Verify(population, grades));
-      taskFlow.Run(population, grades);
+      taskFlow.Get().Run(population, grades);
       SortPopulation(population, grades);
-    } while (GenerationAction(population, grades));
+    };
   }
 
   Grades EvaluatePopulation(Population const &population) {
-    return taskFlow.EvaluatePopulation(population);
+    return taskFlow.Get().EvaluatePopulation(population);
   }
 
   // Also can be used to provide DNA examples
@@ -98,7 +98,7 @@ public:
       pop = GeneratePopulation(newSize - oldSize);
       grd = EvaluatePopulation(pop);
     }
-    taskFlow.SetStateFlow(std::move(stateFlow));
+    taskFlow.Get().SetStateFlow(std::move(stateFlow));
     if (newSize > oldSize) {
       AppendPopulation(std::move(pop), std::move(grd));
       SortPopulation(population, grades);
@@ -204,7 +204,7 @@ private:
   }
 
   size_t GetPopulationSize() const {
-    return taskFlow.GetStateFlow().GetNEvaluates();
+    return taskFlow.Get().GetStateFlow().GetNEvaluates();
   }
 
   bool Verify(Population const &population, Grades const &grades) const {

@@ -1,8 +1,8 @@
 #pragma once
 #include "Evolution/StateFlow.hpp"
+#include <atomic>
 #include <boost/container/small_vector.hpp>
 #include <cassert>
-#include <mutex>
 #include <tbb/concurrent_unordered_map.h>
 
 namespace Evolution {
@@ -14,12 +14,11 @@ private:
       tbb::concurrent_unordered_map<DNA *, std::atomic_int, std::hash<DNA *>>;
 
 #ifndef NDEBUG
-  StateFlow &stateFlow;
+  StateFlow const *stateFlow;
   Poll writePoll;
   Poll readPoll;
   tbb::concurrent_unordered_map<State, Addresses> inputAddress;
   tbb::concurrent_unordered_map<State, DNA *> outputAddress;
-  std::mutex dumpMutex;
 #endif // !NDEBUG
 
 public:
@@ -30,9 +29,9 @@ public:
     Crossover,
   };
 
-  TaskFlowDebugger(StateFlow &stateFlow) noexcept
+  TaskFlowDebugger(StateFlow const &stateFlow) noexcept
 #ifndef NDEBUG
-      : stateFlow(stateFlow)
+      : stateFlow(&stateFlow)
 #endif // !NDEBUG
   {
   }
@@ -59,11 +58,11 @@ public:
 
   void Finish() {
 #ifndef NDEBUG
-    auto &&[sb, se] = stateFlow.GetStates();
+    auto &&[sb, se] = stateFlow->GetStates();
     for (auto si = sb; si != se; ++si)
       CheckComputed(nullptr, *si);
     for (auto si = sb; si != se; ++si)
-      if (stateFlow.IsEvaluate(*si))
+      if (stateFlow->IsEvaluate(*si))
         CheckEvaluated(nullptr, *si);
     CheckWritePollEmpty();
     Clear();
@@ -93,18 +92,18 @@ private:
         "state with incompatible method "};
     switch (nodeType) {
     case NodeType::Input:
-      CheckError(dnaPtr, state, stateFlow.IsInitialState(state),
+      CheckError(dnaPtr, state, stateFlow->IsInitialState(state),
                  msg + "(input)");
       break;
     case NodeType::Evaluate:
-      CheckError(dnaPtr, state, stateFlow.IsEvaluate(state),
+      CheckError(dnaPtr, state, stateFlow->IsEvaluate(state),
                  msg + "(evaluate)");
       break;
     case NodeType::Mutate:
-      CheckError(dnaPtr, state, stateFlow.IsMutate(state), msg + "(mutate)");
+      CheckError(dnaPtr, state, stateFlow->IsMutate(state), msg + "(mutate)");
       break;
     case NodeType::Crossover:
-      CheckError(dnaPtr, state, stateFlow.IsCrossover(state),
+      CheckError(dnaPtr, state, stateFlow->IsCrossover(state),
                  msg + "(crossover)");
       break;
     default:
@@ -113,15 +112,15 @@ private:
     }
   }
   void CheckParentsComputed(DNA *dnaPtr, State state) {
-    if (stateFlow.IsInitialState(state))
+    if (stateFlow->IsInitialState(state))
       return;
-    auto p1 = stateFlow.GetAnyParent(state);
+    auto p1 = stateFlow->GetAnyParent(state);
     CheckComputed(dnaPtr, p1);
-    if (stateFlow.IsCrossover(state))
-      CheckComputed(dnaPtr, stateFlow.GetOtherParent(p1, state));
+    if (stateFlow->IsCrossover(state))
+      CheckComputed(dnaPtr, stateFlow->GetOtherParent(p1, state));
   }
   void CheckChildrenNotComputed(DNA *dnaPtr, State state) {
-    auto &&[cB, cE] = stateFlow.GetChildStates(state);
+    auto &&[cB, cE] = stateFlow->GetChildStates(state);
     for (auto i = cB; i != cE; ++i)
       CheckNotComputed(dnaPtr, *i);
   }
@@ -130,7 +129,7 @@ private:
         "tbb::flow and StateFlow are out of sync. Found an "
         "attempt to compute states in the wrong order. Faulty operation: "};
     auto inCnt = GetInputCount(state);
-    auto opCnt = stateFlow.IsCrossover(state) ? 2 : 1;
+    auto opCnt = stateFlow->IsCrossover(state) ? 2 : 1;
 
     switch (nodeType) {
     case NodeType::Input:
@@ -158,10 +157,10 @@ private:
     auto realInCnt = GetInputCount(state);
     auto realOutCnt = GetOutputCount(state);
     auto isInitialEvaluate =
-        stateFlow.IsInitialState(state) && stateFlow.IsEvaluate(state);
+        stateFlow->IsInitialState(state) && stateFlow->IsEvaluate(state);
     auto isLoneInitial =
-        isInitialEvaluate && stateFlow.GetOutDegree(state) == 0;
-    auto isTBBEvaluate = stateFlow.IsEvaluate(state) && !isInitialEvaluate;
+        isInitialEvaluate && stateFlow->GetOutDegree(state) == 0;
+    auto isTBBEvaluate = stateFlow->IsEvaluate(state) && !isInitialEvaluate;
     if (isLoneInitial) {
       CheckError(
           dnaPtr, state, realInCnt == 0 && realOutCnt == 0,
@@ -169,7 +168,7 @@ private:
           "state which was computed, while it should not be");
       return;
     }
-    auto inCnt = stateFlow.IsCrossover(state) ? 2 : 1;
+    auto inCnt = stateFlow->IsCrossover(state) ? 2 : 1;
     auto outCnt = 1;
     bool isInCountCorrect = realInCnt == inCnt;
     isInCountCorrect |= isTBBEvaluate && realInCnt == inCnt + 1;
@@ -179,13 +178,13 @@ private:
                "be computed, but it is not");
   }
   void CheckEvaluated(DNA *dnaPtr, State state) {
-    assert(stateFlow.IsEvaluate(state));
+    assert(stateFlow->IsEvaluate(state));
     auto isInitialEvaluate =
-        stateFlow.IsInitialState(state) && stateFlow.IsEvaluate(state);
-    auto isTBBEvaluate = stateFlow.IsEvaluate(state) && !isInitialEvaluate;
+        stateFlow->IsInitialState(state) && stateFlow->IsEvaluate(state);
+    auto isTBBEvaluate = stateFlow->IsEvaluate(state) && !isInitialEvaluate;
     if (!isTBBEvaluate)
       return;
-    auto inCnt = stateFlow.IsCrossover(state) ? 3 : 2;
+    auto inCnt = stateFlow->IsCrossover(state) ? 3 : 2;
     CheckError(dnaPtr, state, GetInputCount(state) == inCnt,
                "tbb::flow and StateFlow out of sync. Found state which should "
                "be evaluated, but it is not");
@@ -279,13 +278,13 @@ private:
     if (condition)
       return;
     auto stateType = std::string{};
-    if (stateFlow.IsInitialState(state))
+    if (stateFlow->IsInitialState(state))
       stateType += "initial";
-    else if (stateFlow.IsMutate(state))
+    else if (stateFlow->IsMutate(state))
       stateType += "mutate";
-    else if (stateFlow.IsCrossover(state))
+    else if (stateFlow->IsCrossover(state))
       stateType += "crossover";
-    if (stateFlow.IsEvaluate(state))
+    if (stateFlow->IsEvaluate(state))
       stateType += ", evaluate";
     else
       stateType += ", non-evaluate";
@@ -298,10 +297,13 @@ private:
     assert(false);
   }
   void DumpStateFlow() {
+    // Dump only once
+    static auto dumped = std::atomic_int{};
     // TODO: implement this with collected debug info
-    auto lock = std::lock_guard(dumpMutex);
+    if (dumped.fetch_add(1))
+      return;
     auto dump = std::ofstream("dump.dot");
-    stateFlow.Print(dump);
+    stateFlow->Print(dump);
     dump.close();
   }
 

@@ -34,6 +34,9 @@ BOOST_AUTO_TEST_CASE(second_test) {
 
   auto env =
       Evolution::Environment(generator, Evaluate, Mutate, Crossover, sf, opts);
+  using Env = std::remove_cvref_t<decltype(env)>;
+  static_assert(std::copyable<Env>);
+
   env.Run();
   env.Run();
   env.Run();
@@ -214,9 +217,29 @@ BOOST_AUTO_TEST_CASE(quadratic_equation) {
   auto N = 100;
 
   auto sf = Evolution::GenerateStateFlow(N);
-  auto env = Evolution::Environment(Generator, Evaluate, MutateGen, Crossover,
-                                    sf, opts);
+  using EnvironmentT =
+      typename Evolution::Environment<decltype(Evaluate), decltype(MutateGen),
+                                      decltype(Crossover)>;
+  static_assert(std::copyable<EnvironmentT>);
 
+  auto envPtr = std::unique_ptr<EnvironmentT>(nullptr);
+  auto copyTime = std::chrono::nanoseconds{};
+  auto copyCtorTime = std::chrono::nanoseconds{};
+  auto moveTime = std::chrono::nanoseconds{};
+  auto moveCtorTime = std::chrono::nanoseconds{};
+  {
+    auto envT = Evolution::Environment(Generator, Evaluate, MutateGen,
+                                       Crossover, sf, opts);
+    auto envT2 = envT;
+    auto envT3 = envT;
+    copyCtorTime = Utility::Benchmark([&]() { auto envT2 = envT; }, 100);
+    copyTime = Utility::Benchmark([&]() { envT2 = envT; }, 100);
+    moveTime = Utility::Benchmark([&]() { envT2 = std::move(envT); }, 100);
+    moveCtorTime =
+        Utility::Benchmark([&]() { auto envT3 = std::move(envT); }, 100);
+    envPtr = std::make_unique<EnvironmentT>(std::move(envT3));
+  }
+  auto env = *envPtr;
   for (auto i = size_t{0}; i != 500; ++i)
     env.Run();
 
@@ -227,6 +250,14 @@ BOOST_AUTO_TEST_CASE(quadratic_equation) {
   env.Run();
 
   BOOST_TEST(std::abs(env.GetPopulation().at(0) - 3) < 0.000001);
+  auto moveTimeC = moveTime.count();
+  auto moveCtorTimeC = moveCtorTime.count();
+  auto copyTimeC = copyTime.count();
+  auto copyCtorTimeC = copyCtorTime.count();
+
+  BOOST_TEST(moveTimeC * 10 < copyCtorTimeC);
+  BOOST_TEST(moveTimeC * 10 < copyTimeC);
+  BOOST_TEST(moveCtorTimeC * 10 < copyTimeC);
 
   auto env2 = Evolution::Environment(Generator, Evaluate, MutateGen, Crossover,
                                      sf, opts);
