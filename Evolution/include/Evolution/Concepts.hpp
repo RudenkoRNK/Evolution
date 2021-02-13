@@ -8,7 +8,7 @@ template <typename Callable>
 using CallableTraits = Utility::CallableTraits<Callable>;
 
 template <typename T> static decltype(auto) _DNADecay() {
-  if constexpr (Utility::TypeTraits::isInstanceOf<std::unique_ptr, T>)
+  if constexpr (Utility::isInstanceOf<std::unique_ptr, T>)
     return *(std::declval<T>());
   else
     return *static_cast<std::add_pointer_t<T>>(nullptr);

@@ -31,7 +31,6 @@ template <EvaluateFunctionOrGeneratorConcept EvaluateFG,
 class TaskFlow final {
 
 private:
-  using TypeTraits = Utility::TypeTraits;
   template <typename Callable>
   using CallableTraits = Utility::CallableTraits<Callable>;
 
@@ -54,7 +53,7 @@ private:
 
   template <typename T>
   bool constexpr static isVariant =
-      TypeTraits::isInstanceOf<std::variant, std::remove_cvref_t<T>>;
+      Utility::isInstanceOf<std::variant, std::remove_cvref_t<T>>;
 
 public:
   using DNA = std::remove_cvref_t<
