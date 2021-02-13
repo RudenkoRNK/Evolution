@@ -1,4 +1,5 @@
 #define BOOST_TEST_MODULE Test
+#define NOMINMAX
 
 #include "Evolution/Environment.hpp"
 #include "Evolution/StateFlow.hpp"

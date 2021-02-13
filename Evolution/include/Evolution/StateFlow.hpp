@@ -1,4 +1,5 @@
 #pragma once
+#define BOOST_ALLOW_DEPRECATED_HEADERS
 #include "Utility/Misc.hpp"
 #include <algorithm>
 #include <boost/graph/adjacency_list.hpp>
@@ -6,7 +7,6 @@
 #include <exception>
 #include <optional>
 #include <utility>
-#define NOMINMAX
 
 #include <concepts>
 

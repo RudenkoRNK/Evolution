@@ -1,5 +1,4 @@
 #pragma once
-#define NOMINMAX
 #include "Evolution/Concepts.hpp"
 #include "Evolution/GeneratorTraits.hpp"
 #include "Evolution/StateFlow.hpp"
