@@ -1,21 +1,17 @@
 add_executable(EvolutionTest)
 
-find_package(Boost REQUIRED)
+find_package(Boost REQUIRED COMPONENTS unit_test_framework)
 
-target_link_libraries(EvolutionTest PRIVATE ${Boost_LIBRARIES})
+target_link_libraries(EvolutionTest PRIVATE Boost::unit_test_framework)
 target_link_libraries(EvolutionTest PRIVATE Evolution)
 
 target_include_directories(EvolutionTest PRIVATE ${Boost_INCLUDE_DIRS})
 
-set_property(TARGET EvolutionTest PROPERTY CXX_STANDARD 20)
-
 file(GLOB EvolutionTestSources
   CONFIGURE_DEPENDS
-  ${CMAKE_CURRENT_SOURCE_DIR}/*.hpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/*.[hcm]pp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../Evolution/include/Evolution/*.[hcm]pp
 )
-
-target_sources(EvolutionTest PRIVATE ${EvolutionSources})
 target_sources(EvolutionTest PRIVATE ${EvolutionTestSources})
 
 if (MSVC)
