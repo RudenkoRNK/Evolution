@@ -5,6 +5,7 @@
 namespace Evolution {
 
 struct GeneratorTraits final {
+  // TODO: maybe use objects instead of std::function?
 private:
   template <typename Callable>
   using CallableTraits = typename Utility::CallableTraits<Callable>;
