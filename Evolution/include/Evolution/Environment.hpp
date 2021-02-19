@@ -47,8 +47,8 @@ public:
     RegeneratePopulation();
   }
 
-  Population const &GetPopulation() const { return population; }
-  Grades const &GetGrades() const { return grades; }
+  Population const &GetPopulation() const & { return population; }
+  Grades const &GetGrades() const & { return grades; }
 
   void Run(size_t n = 1) {
     Run([&](Population const &, Grades const &) { return n-- > 0; });

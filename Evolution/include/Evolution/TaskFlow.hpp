@@ -166,7 +166,7 @@ public:
         evaluateFTG(other.evaluateFTG), mutateFTG(other.mutateFTG),
         crossoverFTG(other.crossoverFTG), evaluateBuffer(other.evaluateBuffer) {
   }
-  TaskFlow &operator=(TaskFlow const &other) {
+  TaskFlow &operator=(TaskFlow const &other) & {
     if (other == *this)
       return;
     auto options_ = other.options;
@@ -242,7 +242,7 @@ public:
     this->stateFlow = std::move(stateFlow);
   }
 
-  StateFlow const &GetStateFlow() const noexcept { return stateFlow; }
+  StateFlow const &GetStateFlow() const &noexcept { return stateFlow; }
 
 private:
   EvaluateFunction &GetEvaluateFunction() {
