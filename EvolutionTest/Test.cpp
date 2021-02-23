@@ -11,6 +11,8 @@
 #include <tbb/enumerable_thread_specific.h>
 #include <tbb/flow_graph.h>
 
+auto static constexpr verbose = true;
+
 BOOST_AUTO_TEST_CASE(first_test) {
   auto sf = Evolution::StateFlow{};
   auto s0 = sf.GetOrAddInitialState(0);
@@ -816,4 +818,91 @@ BOOST_AUTO_TEST_CASE(exception_test) {
     isThrow[it] = false;
     env1.Run();
   }
+}
+
+BOOST_AUTO_TEST_CASE(perf_test) {
+  // Perfomance can be compared to similar example of openGA library
+  // https://github.com/Arash-codedev/openGA/tree/master/examples/so-1
+
+  struct MySolution {
+    double x;
+    double y;
+
+    std::string to_string() const {
+      return "{x:" + std::to_string(x) + ", y:" + std::to_string(y) + "}";
+    }
+  };
+  auto static constexpr invroot2 = 1.4142135 / 2;
+  auto Evaluate = [](MySolution const &s) {
+    auto const &[x, y] = s;
+    double predictable_noise =
+        30.0 * sin(x * 100.0 * sin(y) + y * 100.0 * cos(x));
+    auto cost_distance2 = x * x + y * y + predictable_noise;
+    auto cost_sqsin =
+        125 + 45.0 * sqrt(x + y) * sin((15.0 * (x + y)) / (x * x + y * y));
+    return -cost_distance2 - cost_sqsin;
+  };
+
+  auto Mutate = [](MySolution s) -> MySolution {
+    auto &&[x, y] = s;
+    auto dx = invroot2 * (x - y);
+    auto dy = invroot2 * (x + y);
+    auto rand = std::uniform_real_distribution(-1.5, 1.5);
+    auto &&gen = Utility::GetRandomGenerator();
+    dy *= std::pow(2, rand(gen));
+    dx += dy * std::pow(2, rand(gen)) * (rand(gen) > 0 ? 1 : -1);
+    auto s1 = MySolution{(dx + dy) * invroot2, (dy - dx) * invroot2};
+    assert(s.x + s.y > -0.0001);
+    return s1;
+  };
+  auto Crossover = [](MySolution &&s1, MySolution const &s2) -> MySolution & {
+    s1.x = (s1.x + s2.x) / 2;
+    s1.y = (s1.y + s2.y) / 2;
+    return s1;
+  };
+  auto Generator = []() -> MySolution {
+    auto &&gen = Utility::GetRandomGenerator();
+    auto rand = std::uniform_int_distribution(0, 20);
+    auto dx = rand(gen) - 10;
+    auto dy = rand(gen);
+    auto s = MySolution{(dx + dy) * invroot2, (dy - dx) * invroot2};
+    assert(s.x + s.y > -0.0001);
+    return s;
+  };
+
+  auto nGens = 30;
+  auto opts = Evolution::EnvironmentOptions{};
+  opts.isEvaluateLightweight = Utility::AutoOption::True();
+  opts.isMutateLightweight = Utility::AutoOption::True();
+  opts.isCrossoverLightweight = Utility::AutoOption::True();
+
+  auto env = Evolution::Environment(Generator, Evaluate, Mutate, Crossover,
+                                    Evolution::GenerateStateFlow(20), opts);
+
+  auto tot = Utility::Benchmark([&]() {
+    for (auto i = 0; i != nGens; ++i) {
+      auto gent = Utility::Benchmark([&]() { env.Run(); });
+      auto const &pop = env.GetPopulation();
+      auto const &grade = env.GetGrades();
+      auto avg =
+          std::accumulate(grade.begin(), grade.end(), 0.0) / grade.size();
+      if constexpr (verbose) {
+        std::cout << "Generation [" << i << "], "
+                  << "Best=" << grade[0] << ", "
+                  << "Avg=" << avg << ", "
+                  << "Best genes=(" << pop[0].to_string() << ")"
+                  << ", "
+                  << "Exe_time=" << gent.count() / 1000 / 1000 << " ms"
+                  << std::endl;
+      }
+    }
+  });
+  if constexpr (verbose) {
+    std::cout << "Total " << tot.count() / 1000 / 1000 << " ms" << std::endl;
+  }
+#ifndef NDEBUG
+  BOOST_TEST(tot.count() / nGens / 1000 / 1000 < 50);
+#else
+  BOOST_TEST(tot.count() / nGens / 1000 / 1000 < 4);
+#endif // !NDEBUG
 }
