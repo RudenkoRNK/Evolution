@@ -1,8 +1,8 @@
 add_executable(EvolutionTest)
 
-find_package(Boost REQUIRED COMPONENTS unit_test_framework)
+find_package(Boost REQUIRED)
 
-target_link_libraries(EvolutionTest PRIVATE Boost::unit_test_framework)
+target_link_libraries(EvolutionTest PRIVATE ${Boost_LIBRARIES})
 target_link_libraries(EvolutionTest PRIVATE Evolution)
 
 target_include_directories(EvolutionTest PRIVATE ${Boost_INCLUDE_DIRS})
