@@ -1,6 +1,6 @@
 #pragma once
 #define BOOST_ALLOW_DEPRECATED_HEADERS
-#include "Utility/Misc.hpp"
+#include "utility/misc.hpp"
 #include <algorithm>
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/graphviz.hpp>

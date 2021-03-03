@@ -10,7 +10,7 @@ target_include_directories(EvolutionTest PRIVATE ${Boost_INCLUDE_DIRS})
 file(GLOB EvolutionTestSources
   CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/*.[hcm]pp
-  ${CMAKE_CURRENT_SOURCE_DIR}/../Evolution/include/Evolution/*.[hcm]pp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../evolution/include/evolution/*.[hcm]pp
 )
 target_sources(EvolutionTest PRIVATE ${EvolutionTestSources})
 

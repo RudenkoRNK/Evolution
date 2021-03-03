@@ -1,5 +1,5 @@
 #pragma once
-#include "Utility/TypeTraits.hpp"
+#include "utility/type_traits.hpp"
 #include <tbb/enumerable_thread_specific.h>
 
 namespace Evolution {

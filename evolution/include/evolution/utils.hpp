@@ -1,7 +1,7 @@
 #pragma once
 
-#include "Evolution/Concepts.hpp"
-#include "Evolution/StateFlow.hpp"
+#include "evolution/concepts.hpp"
+#include "evolution/state_flow.hpp"
 
 namespace Evolution {
 

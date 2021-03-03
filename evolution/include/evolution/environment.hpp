@@ -1,9 +1,9 @@
 #pragma once
-#include "Evolution/Concepts.hpp"
-#include "Evolution/StateFlow.hpp"
-#include "Evolution/TaskFlowContainer.hpp"
-#include "Evolution/Utils.hpp"
-#include "Utility/Misc.hpp"
+#include "evolution/concepts.hpp"
+#include "evolution/state_flow.hpp"
+#include "evolution/task_flow_container.hpp"
+#include "evolution/utils.hpp"
+#include "utility/misc.hpp"
 
 namespace Evolution {
 

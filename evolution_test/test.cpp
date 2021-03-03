@@ -1,10 +1,10 @@
 #define BOOST_TEST_MODULE Test
 #define NOMINMAX
 
-#include "Evolution/Environment.hpp"
-#include "Evolution/StateFlow.hpp"
-#include "Evolution/TaskFlow.hpp"
-#include "Evolution/Utils.hpp"
+#include "evolution/environment.hpp"
+#include "evolution/state_flow.hpp"
+#include "evolution/task_flow.hpp"
+#include "evolution/utils.hpp"
 #include <boost/test/included/unit_test.hpp>
 #include <functional>
 #include <random>

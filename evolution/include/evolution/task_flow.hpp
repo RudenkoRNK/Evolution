@@ -1,10 +1,10 @@
 #pragma once
-#include "Evolution/Concepts.hpp"
-#include "Evolution/GeneratorTraits.hpp"
-#include "Evolution/StateFlow.hpp"
-#include "Evolution/TaskFlowDebugger.hpp"
-#include "Utility/Misc.hpp"
-#include "Utility/TypeTraits.hpp"
+#include "evolution/concepts.hpp"
+#include "evolution/generator_traits.hpp"
+#include "evolution/state_flow.hpp"
+#include "evolution/task_flow_debugger.hpp"
+#include "utility/misc.hpp"
+#include "utility/type_traits.hpp"
 #include <algorithm>
 #include <cassert>
 #include <execution>
