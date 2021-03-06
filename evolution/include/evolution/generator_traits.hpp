@@ -14,7 +14,7 @@ private:
 
 public:
   template <typename FG>
-  auto constexpr static isGenerator = CallableTraits<FG>::nArguments == 0;
+  constexpr static auto isGenerator = CallableTraits<FG>::nArguments == 0;
 
 private:
   template <typename FG>
@@ -39,13 +39,13 @@ public:
 
 private:
   template <typename Callable>
-  auto constexpr static is_std_function =
+  constexpr static auto is_std_function =
       std::is_same_v<RawCallable<Callable>,
                      CallableTraits<Callable>::std_function>;
 
   template <typename Callable>
-  auto static to_std_function(Callable &&callable) noexcept(
-      is_std_function<Callable>)
+  static auto
+  to_std_function(Callable &&callable) noexcept(is_std_function<Callable>)
       -> std::conditional_t<is_std_function<Callable>, Callable &&,
                             typename CallableTraits<Callable>::std_function> {
     using std_function = typename CallableTraits<Callable>::std_function;
@@ -57,7 +57,7 @@ private:
 
 public:
   template <typename FG>
-  auto static WrapFunctionOrGenerator(FG &&fg)
+  static auto WrapFunctionOrGenerator(FG &&fg)
       -> std::conditional_t<isGenerator<FG> || !is_std_function<FG>,
                             FunctionOrTBBGenerator<FG>, FG &&> {
     if constexpr (!isGenerator<FG>)
@@ -77,12 +77,12 @@ public:
     return generatorOrFunction;
   }
   template <typename FG>
-  auto static GetFunction(Generator<FG> const &generatorOrFunction) noexcept(
+  static auto GetFunction(Generator<FG> const &generatorOrFunction) noexcept(
       noexcept(generatorOrFunction())) -> decltype(generatorOrFunction()) {
     return generatorOrFunction();
   }
   template <typename FG>
-  auto static GetFunction(TBBGenerator<FG> &generatorOrFunction)
+  static auto GetFunction(TBBGenerator<FG> &generatorOrFunction)
       -> decltype(generatorOrFunction.local()) {
     return generatorOrFunction.local();
   }

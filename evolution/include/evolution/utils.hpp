@@ -5,7 +5,7 @@
 
 namespace Evolution {
 
-StateFlow inline GenerateStateFlow(size_t populationSize) {
+inline StateFlow GenerateStateFlow(size_t populationSize) {
   if (populationSize == 0)
     return StateFlow{};
   if (populationSize == 1) {
@@ -85,8 +85,8 @@ StateFlow inline GenerateStateFlow(size_t populationSize) {
 }
 
 template <typename FG, typename... Args>
-bool inline IsFGLightweight(FG const &Func, Args &&... args) {
-  auto constexpr static maxLightweightClocks = size_t{1000000};
+inline bool IsFGLightweight(FG const &Func, Args &&... args) {
+  constexpr static auto maxLightweightClocks = size_t{1000000};
   auto FG_ = std::function(Func);
   auto &&Func_ = GeneratorTraits::GetFunction<decltype(Func)>(FG_);
   auto freq = 2; // clocks per nanosecond

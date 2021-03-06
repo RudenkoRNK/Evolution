@@ -51,7 +51,7 @@ private:
       typename Utility::CallableTraits<CrossoverFunction>::ReturnType;
 
   template <typename T>
-  bool constexpr static isVariant =
+  constexpr static bool isVariant =
       Utility::isInstanceOf<std::variant, std::remove_cvref_t<T>>;
 
 public:
@@ -72,19 +72,19 @@ private:
   static_assert(std::is_same_v<DNA, DNADecay<CrossoverArg0>>);
   static_assert(std::is_same_v<DNA, DNADecay<CrossoverArg1>>);
 
-  auto constexpr static isMutateInPlace =
+  constexpr static auto isMutateInPlace =
       (!CallableTraits<MutateFunction>::template isConst<1>);
-  auto constexpr static isMutateMovable =
+  constexpr static auto isMutateMovable =
       CallableTraits<MutateFunction>::template isRValueReference<1> ||
       CallableTraits<MutateFunction>::template isValue<1>;
-  auto constexpr static isCrossoverInPlaceFirst =
+  constexpr static auto isCrossoverInPlaceFirst =
       !CallableTraits<CrossoverFunction>::template isConst<1>;
-  auto constexpr static isCrossoverInPlaceSecond =
+  constexpr static auto isCrossoverInPlaceSecond =
       !CallableTraits<CrossoverFunction>::template isConst<2>;
-  auto constexpr static isCrossoverMovableFirst =
+  constexpr static auto isCrossoverMovableFirst =
       CallableTraits<CrossoverFunction>::template isRValueReference<1> ||
       CallableTraits<CrossoverFunction>::template isValue<1>;
-  auto constexpr static isCrossoverMovableSecond =
+  constexpr static auto isCrossoverMovableSecond =
       CallableTraits<CrossoverFunction>::template isRValueReference<2> ||
       CallableTraits<CrossoverFunction>::template isValue<2>;
 
@@ -101,8 +101,8 @@ private:
   using FunctionNode =
       tbb::flow::function_node<Input, Output, Policy, Allocator>;
 
-  auto constexpr static DefaultPolicyIndex = std::in_place_index<0>;
-  auto constexpr static LightweightPolicyIndex = std::in_place_index<1>;
+  constexpr static auto DefaultPolicyIndex = std::in_place_index<0>;
+  constexpr static auto LightweightPolicyIndex = std::in_place_index<1>;
   using InputNode = FunctionNode<DNA *, DNAPtr>;
   using EvaluateNode =
       std::variant<FunctionNode<DNAPtr, int>,
@@ -516,9 +516,9 @@ private:
     using InputNodeRef = std::reference_wrapper<InputNode>;
     using MutateNodeRef = std::reference_wrapper<MutateNode>;
     using CrossoverNodeRef = std::reference_wrapper<CrossoverNode>;
-    auto constexpr InputNodeIndex = std::in_place_index<0>;
-    auto constexpr MutateNodeIndex = std::in_place_index<1>;
-    auto constexpr CrossoverNodeIndex = std::in_place_index<2>;
+    constexpr auto InputNodeIndex = std::in_place_index<0>;
+    constexpr auto MutateNodeIndex = std::in_place_index<1>;
+    constexpr auto CrossoverNodeIndex = std::in_place_index<2>;
     using NodeRef = std::variant<InputNodeRef, MutateNodeRef, CrossoverNodeRef>;
 
     auto tbbFlow = TBBFlow{};
@@ -673,8 +673,8 @@ private:
     return tbbFlow;
   }
 
-  std::vector<size_t> static EvaluateInitialNonEvaluateIndices(
-      StateFlow const &stateFlow) {
+  static std::vector<size_t>
+  EvaluateInitialNonEvaluateIndices(StateFlow const &stateFlow) {
     auto availableIndices = std::vector<size_t>{};
     auto unailableIndices = std::unordered_set<size_t>{};
     for (auto state : stateFlow.GetInitialStates())

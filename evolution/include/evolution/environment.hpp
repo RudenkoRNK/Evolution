@@ -214,7 +214,7 @@ private:
     return verified;
   }
 
-  auto static GetSortFunction() {
+  static auto GetSortFunction() {
     static_assert(std::is_arithmetic_v<Grade>,
                   "For custom Grades provide custom SortPopulation function");
     return [](Population const &population, Grades const &grades) {

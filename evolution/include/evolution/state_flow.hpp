@@ -13,7 +13,7 @@
 namespace Evolution {
 class StateFlow final {
 private:
-  auto constexpr static UndefinedIndex = size_t(-1);
+  constexpr static auto UndefinedIndex = size_t(-1);
   struct StateProperties final {
     bool isEvaluate = false;
     size_t index = UndefinedIndex;
