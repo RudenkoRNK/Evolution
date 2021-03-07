@@ -63,4 +63,12 @@ private:
     return ptr;
   }
 };
+
+template <EvaluateFunctionOrGeneratorConcept EvaluateFG,
+          MutateFunctionOrGeneratorConcept MutateFG,
+          CrossoverFunctionOrGeneratorConcept CrossoverFG>
+void swap(TaskFlowContainer<EvaluateFG, MutateFG, CrossoverFG> &left,
+          TaskFlowContainer<EvaluateFG, MutateFG, CrossoverFG> right) noexcept {
+  left.swap(right);
+}
 } // namespace Evolution
