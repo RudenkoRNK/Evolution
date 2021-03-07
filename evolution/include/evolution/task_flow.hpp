@@ -137,8 +137,8 @@ private:
     bool isCrossoverLightweight;
   };
   EnvironmentOptions options;
-  TBBFlow tbbFlow;
   StateFlow stateFlow;
+  TBBFlow tbbFlow;
   TaskFlowDebugger<DNA> debugger;
   EvaluateFTG evaluateFTG;
   MutateFTG mutateFTG;
@@ -147,41 +147,24 @@ private:
 
 public:
   TaskFlow(EvaluateFG const &Evaluate, MutateFG const &Mutate,
-           CrossoverFG const &Crossover, StateFlow const &stateFlow,
-           EnvironmentOptions const &options = EnvironmentOptions{})
-      : options(options), tbbFlow(GenerateTBBFlow(stateFlow, options)),
-        stateFlow(stateFlow), debugger(this->stateFlow),
-        evaluateFTG(GeneratorTraits::WrapFunctionOrGenerator(Evaluate)),
-        mutateFTG(GeneratorTraits::WrapFunctionOrGenerator(Mutate)),
-        crossoverFTG(GeneratorTraits::WrapFunctionOrGenerator(Crossover)) {}
+           CrossoverFG const &Crossover, StateFlow const &stateFlow_,
+           EnvironmentOptions const &options_ = EnvironmentOptions{})
+      : options{options_}, stateFlow{stateFlow_},
+        tbbFlow{GenerateTBBFlow(stateFlow, options)}, debugger{stateFlow},
+        evaluateFTG{GeneratorTraits::WrapFunctionOrGenerator(Evaluate)},
+        mutateFTG{GeneratorTraits::WrapFunctionOrGenerator(Mutate)},
+        crossoverFTG{GeneratorTraits::WrapFunctionOrGenerator(Crossover)} {}
 
   // TBBFlow will have references to previous *this otherwise
   TaskFlow(TaskFlow &&other) = delete;
   TaskFlow &operator=(TaskFlow &&other) = delete;
 
   TaskFlow(TaskFlow const &other)
-      : options(other.options),
-        tbbFlow(GenerateTBBFlow(other.stateFlow, other.options)),
-        stateFlow(other.stateFlow), debugger(this->stateFlow),
-        evaluateFTG(other.evaluateFTG), mutateFTG(other.mutateFTG),
-        crossoverFTG(other.crossoverFTG), evaluateBuffer(other.evaluateBuffer) {
-  }
-  TaskFlow &operator=(TaskFlow const &other) & {
-    if (other == *this)
-      return;
-    auto options_ = other.options;
-    auto debugger_ = other.debugger;
-    auto evaluateFTG_ = other.evaluateFTG;
-    auto mutateFTG_ = other.mutateFTG;
-    auto crossoverFTG_ = other.crossoverFTG;
-    auto evaluateBuffer_ = other.evaluateBuffer;
-    SetStateFlow(other.stateFlow);
-    options = std::move(options_);
-    debugger = std::move(debugger_);
-    evaluateFTG = std::move(evaluateFTG_);
-    mutateFTG = std::move(mutateFTG_);
-    crossoverFTG = std::move(crossoverFTG_);
-    evaluateBuffer = std::move(evaluateBuffer_);
+      : options{other.options}, stateFlow{other.stateFlow},
+        tbbFlow{GenerateTBBFlow(other.stateFlow, other.options)},
+        debugger{stateFlow},
+        evaluateFTG{other.evaluateFTG}, mutateFTG{other.mutateFTG},
+        crossoverFTG{other.crossoverFTG}, evaluateBuffer{other.evaluateBuffer} {
   }
 
   void Run(Population &population, Grades &grades) {
@@ -231,15 +214,16 @@ public:
   }
 
   // Strong exception guarantee
-  void SetStateFlow(StateFlow &&stateFlow) {
-    auto tbbFlow_ = GenerateTBBFlow(stateFlow, options);
+  void SetStateFlow(StateFlow &&stateFlow_) {
+    auto tbbFlow_ = GenerateTBBFlow(stateFlow_, options);
     tbbFlow.inputNodes.clear();
     tbbFlow.evaluateNodes.clear();
     tbbFlow.mutateNodes.clear();
     tbbFlow.crossoverJoinNodes.clear();
     tbbFlow.crossoverNodes.clear();
     tbbFlow = std::move(tbbFlow_);
-    this->stateFlow = std::move(stateFlow);
+    stateFlow = std::move(stateFlow_);
+    debugger.SetStateFlow(stateFlow);
   }
 
   StateFlow const &GetStateFlow() const &noexcept { return stateFlow; }

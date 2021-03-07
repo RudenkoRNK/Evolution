@@ -51,6 +51,44 @@ BOOST_AUTO_TEST_CASE(second_test) {
   BOOST_TEST(grades.at(1) == 3);
 }
 
+BOOST_AUTO_TEST_CASE(swap_copy_env_test) {
+  using std::swap;
+  auto sf1 = Evolution::GenerateStateFlow(10);
+  auto sf2 = Evolution::GenerateStateFlow(20);
+
+  auto Evaluate = [](int x) { return x * 1.0; };
+  auto Mutate = [](int x) { return x + 1; };
+  auto Crossover = [](int x, int y) { return x + y; };
+  auto generator = []() -> int { return 1; };
+  auto opts = Evolution::EnvironmentOptions{};
+
+  auto env1 =
+      Evolution::Environment(generator, Evaluate, Mutate, Crossover, sf1, opts);
+  auto env2 =
+      Evolution::Environment(generator, Evaluate, Mutate, Crossover, sf2, opts);
+  using Env = std::remove_cvref_t<decltype(env1)>;
+  static_assert(std::is_nothrow_swappable_v<Env>);
+  static_assert(noexcept(swap(env1, env2)));
+
+  env1.Run();
+  env2.Run();
+  swap(env1, env2);
+  env1.Run();
+  env2.Run();
+  auto env3 = env1;
+  auto env4 = env2;
+  env1.Run();
+  env2.Run();
+  env3.Run();
+  env4.Run();
+  env1 = env4;
+  env2 = env3;
+  env1.Run();
+  env2.Run();
+  env3.Run();
+  env4.Run();
+}
+
 BOOST_AUTO_TEST_CASE(empty_sf_test) {
   auto cnt = std::atomic_int{0};
   auto Evaluate = [&](int x) {
