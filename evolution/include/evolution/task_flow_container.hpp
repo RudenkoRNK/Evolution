@@ -6,7 +6,6 @@ template <EvaluateFunctionOrGeneratorConcept EvaluateFG,
           MutateFunctionOrGeneratorConcept MutateFG,
           CrossoverFunctionOrGeneratorConcept CrossoverFG>
 class TaskFlowContainer final {
-  // TODO: TaskFlow is a part of TaskFlowContainer. This should be inverted
 private:
   using TaskFlowPtr =
       std::unique_ptr<TaskFlow<EvaluateFG, MutateFG, CrossoverFG>>;
@@ -36,19 +35,19 @@ public:
     std::swap(taskFlowPtr, other.taskFlowPtr);
   }
 
-  TaskFlowInst const &Get() const & {
+  TaskFlowInst const &Get() const {
     assert(taskFlowPtr);
     return *taskFlowPtr;
   }
-  TaskFlowInst &Get() & {
+  TaskFlowInst &Get() {
     assert(taskFlowPtr);
     return *taskFlowPtr;
   }
-  operator TaskFlowInst &() & {
+  operator TaskFlowInst &() {
     assert(taskFlowPtr);
     return *taskFlowPtr;
   }
-  operator TaskFlowInst const &() const & {
+  operator TaskFlowInst const &() const {
     assert(taskFlowPtr);
     return *taskFlowPtr;
   }
