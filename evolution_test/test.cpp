@@ -12,9 +12,10 @@
 #include <tbb/flow_graph.h>
 
 auto static constexpr verbose = true;
+using namespace Evolution;
 
 BOOST_AUTO_TEST_CASE(first_test) {
-  auto sf = Evolution::StateFlow{};
+  auto sf = StateFlow{};
   auto s0 = sf.GetOrAddInitialState(0);
   BOOST_TEST(sf.IsNotReady().has_value());
   sf.SetEvaluate(s0);
@@ -22,7 +23,7 @@ BOOST_AUTO_TEST_CASE(first_test) {
 }
 
 BOOST_AUTO_TEST_CASE(second_test) {
-  auto sf = Evolution::StateFlow{};
+  auto sf = StateFlow{};
   auto s0 = sf.GetOrAddInitialState(0);
   auto s1 = sf.GetOrAddInitialState(1);
   auto s2 = sf.AddCrossover(s0, s1);
@@ -33,10 +34,9 @@ BOOST_AUTO_TEST_CASE(second_test) {
   auto Mutate = [](int x) { return x + 1; };
   auto Crossover = [](int x, int y) { return x + y; };
   auto generator = []() -> int { return 1; };
-  auto opts = Evolution::EnvironmentOptions{};
+  auto opts = EnvironmentOptions{};
 
-  auto env =
-      Evolution::Environment(generator, Evaluate, Mutate, Crossover, sf, opts);
+  auto env = Environment(generator, Evaluate, Mutate, Crossover, sf, opts);
   using Env = std::remove_cvref_t<decltype(env)>;
   static_assert(std::copyable<Env>);
 
@@ -53,19 +53,17 @@ BOOST_AUTO_TEST_CASE(second_test) {
 
 BOOST_AUTO_TEST_CASE(swap_copy_env_test) {
   using std::swap;
-  auto sf1 = Evolution::GenerateStateFlow(10);
-  auto sf2 = Evolution::GenerateStateFlow(20);
+  auto sf1 = GenerateStateFlow(10);
+  auto sf2 = GenerateStateFlow(20);
 
   auto Evaluate = [](int x) { return x * 1.0; };
   auto Mutate = [](int x) { return x + 1; };
   auto Crossover = [](int x, int y) { return x + y; };
   auto generator = []() -> int { return 1; };
-  auto opts = Evolution::EnvironmentOptions{};
+  auto opts = EnvironmentOptions{};
 
-  auto env1 =
-      Evolution::Environment(generator, Evaluate, Mutate, Crossover, sf1, opts);
-  auto env2 =
-      Evolution::Environment(generator, Evaluate, Mutate, Crossover, sf2, opts);
+  auto env1 = Environment(generator, Evaluate, Mutate, Crossover, sf1, opts);
+  auto env2 = Environment(generator, Evaluate, Mutate, Crossover, sf2, opts);
   using Env = std::remove_cvref_t<decltype(env1)>;
   static_assert(std::is_nothrow_swappable_v<Env>);
   static_assert(noexcept(swap(env1, env2)));
@@ -107,26 +105,24 @@ BOOST_AUTO_TEST_CASE(empty_sf_test) {
     ++cnt;
     return 1;
   };
-  auto sf = Evolution::StateFlow{};
+  auto sf = StateFlow{};
   BOOST_TEST(!sf.IsNotReady());
-  auto opts = Evolution::EnvironmentOptions{};
-  auto env =
-      Evolution::Environment(generator, Evaluate, Mutate, Crossover, sf, opts);
+  auto opts = EnvironmentOptions{};
+  auto env = Environment(generator, Evaluate, Mutate, Crossover, sf, opts);
   env.Run(size_t{10});
   BOOST_TEST(cnt <= 7);
   cnt = 0;
   opts.isEvaluateLightweight = Utility::AutoOption::False();
   opts.isMutateLightweight = Utility::AutoOption::False();
   opts.isCrossoverLightweight = Utility::AutoOption::False();
-  auto env2 =
-      Evolution::Environment(generator, Evaluate, Mutate, Crossover, sf, opts);
+  auto env2 = Environment(generator, Evaluate, Mutate, Crossover, sf, opts);
   env2.Run(size_t{10});
   BOOST_TEST(cnt == 0);
 }
 
 BOOST_AUTO_TEST_CASE(sf_generator_test) {
   for (auto i = size_t{0}; i < size_t{100}; ++i) {
-    auto sf = Evolution::GenerateStateFlow(i);
+    auto sf = GenerateStateFlow(i);
     BOOST_TEST(!sf.IsNotReady());
   }
 }
@@ -134,7 +130,7 @@ BOOST_AUTO_TEST_CASE(sf_generator_test) {
 int Evaluate11(int x) { return x; }
 
 BOOST_AUTO_TEST_CASE(env_ctor_test) {
-  auto sf = Evolution::GenerateStateFlow(2);
+  auto sf = GenerateStateFlow(2);
 
   auto a = 1;
   auto Evaluate1 = [](int x) { return x; };
@@ -168,29 +164,29 @@ BOOST_AUTO_TEST_CASE(env_ctor_test) {
   auto Mutate = [](int x) { return x + 1; };
   auto Crossover = [](int x, int y) { return x + y; };
   auto generator = []() -> int { return 1; };
-  auto opts = Evolution::EnvironmentOptions{};
+  auto opts = EnvironmentOptions{};
 
-  Evolution::Environment(generator, Evaluate1, Mutate, Crossover, sf, opts);
-  Evolution::Environment(generator, Evaluate2, Mutate, Crossover, sf, opts);
-  Evolution::Environment(generator, Evaluate3, Mutate, Crossover, sf, opts);
-  Evolution::Environment(generator, Evaluate4, Mutate, Crossover, sf, opts);
-  Evolution::Environment(generator, Evaluate5, Mutate, Crossover, sf, opts);
-  Evolution::Environment(generator, Evaluate6, Mutate, Crossover, sf, opts);
-  Evolution::Environment(generator, Evaluate7, Mutate, Crossover, sf, opts);
-  Evolution::Environment(generator, Evaluate8, Mutate, Crossover, sf, opts);
-  Evolution::Environment(generator, Evaluate9, Mutate, Crossover, sf, opts);
-  Evolution::Environment(generator, Evaluate10, Mutate, Crossover, sf, opts);
+  Environment(generator, Evaluate1, Mutate, Crossover, sf, opts);
+  Environment(generator, Evaluate2, Mutate, Crossover, sf, opts);
+  Environment(generator, Evaluate3, Mutate, Crossover, sf, opts);
+  Environment(generator, Evaluate4, Mutate, Crossover, sf, opts);
+  Environment(generator, Evaluate5, Mutate, Crossover, sf, opts);
+  Environment(generator, Evaluate6, Mutate, Crossover, sf, opts);
+  Environment(generator, Evaluate7, Mutate, Crossover, sf, opts);
+  Environment(generator, Evaluate8, Mutate, Crossover, sf, opts);
+  Environment(generator, Evaluate9, Mutate, Crossover, sf, opts);
+  Environment(generator, Evaluate10, Mutate, Crossover, sf, opts);
 #pragma warning(disable : 4180)
-  Evolution::Environment(generator, Evaluate11, Mutate, Crossover, sf, opts);
+  Environment(generator, Evaluate11, Mutate, Crossover, sf, opts);
 #pragma warning(default : 4180)
-  Evolution::Environment(generator, Evaluate12, Mutate, Crossover, sf, opts);
-  Evolution::Environment(generator, Evaluate13, Mutate, Crossover, sf, opts);
-  Evolution::Environment(generator, Evaluate14, Mutate, Crossover, sf, opts);
-  Evolution::Environment(generator, Evaluate15, Mutate, Crossover, sf, opts);
+  Environment(generator, Evaluate12, Mutate, Crossover, sf, opts);
+  Environment(generator, Evaluate13, Mutate, Crossover, sf, opts);
+  Environment(generator, Evaluate14, Mutate, Crossover, sf, opts);
+  Environment(generator, Evaluate15, Mutate, Crossover, sf, opts);
 }
 
 BOOST_AUTO_TEST_CASE(env_ctor_test2) {
-  auto sf = Evolution::GenerateStateFlow(10);
+  auto sf = GenerateStateFlow(10);
   auto Mutate1 = [](std::string x) -> std::string { return x; };
   auto Mutate2 = [](std::string &x) -> std::string { return x; };
   auto Mutate3 = [](std::string const &x) -> std::string { return x; };
@@ -215,27 +211,18 @@ BOOST_AUTO_TEST_CASE(env_ctor_test2) {
     auto rand = std::uniform_int_distribution<>(0, 255);
     return std::string(1, static_cast<char>(rand(gen)));
   };
-  auto opts = Evolution::EnvironmentOptions{};
+  auto opts = EnvironmentOptions{};
 
-  Evolution::Environment(generator, Evaluate, Mutate1, Crossover, sf, opts)
-      .Run(size_t{3});
-  Evolution::Environment(generator, Evaluate, Mutate2, Crossover, sf, opts)
-      .Run(size_t{3});
-  Evolution::Environment(generator, Evaluate, Mutate3, Crossover, sf, opts)
-      .Run(size_t{3});
-  Evolution::Environment(generator, Evaluate, Mutate4, Crossover, sf, opts)
-      .Run(size_t{3});
-  Evolution::Environment(generator, Evaluate, Mutate5, Crossover, sf, opts)
-      .Run(size_t{3});
-  Evolution::Environment(generator, Evaluate, Mutate6, Crossover, sf, opts)
-      .Run(size_t{3});
-  Evolution::Environment(generator, Evaluate, Mutate7, Crossover, sf, opts)
-      .Run(size_t{3});
-  Evolution::Environment(generator, Evaluate, Mutate8, Crossover, sf, opts)
-      .Run(size_t{3});
-  Evolution::Environment(generator, Evaluate, Mutate9, Crossover, sf, opts)
-      .Run(size_t{3});
-  static_assert(Evolution::MutateFunctionOrGeneratorConcept<decltype(Mutate9)>);
+  Environment(generator, Evaluate, Mutate1, Crossover, sf, opts).Run(size_t{3});
+  Environment(generator, Evaluate, Mutate2, Crossover, sf, opts).Run(size_t{3});
+  Environment(generator, Evaluate, Mutate3, Crossover, sf, opts).Run(size_t{3});
+  Environment(generator, Evaluate, Mutate4, Crossover, sf, opts).Run(size_t{3});
+  Environment(generator, Evaluate, Mutate5, Crossover, sf, opts).Run(size_t{3});
+  Environment(generator, Evaluate, Mutate6, Crossover, sf, opts).Run(size_t{3});
+  Environment(generator, Evaluate, Mutate7, Crossover, sf, opts).Run(size_t{3});
+  Environment(generator, Evaluate, Mutate8, Crossover, sf, opts).Run(size_t{3});
+  Environment(generator, Evaluate, Mutate9, Crossover, sf, opts).Run(size_t{3});
+  static_assert(MutateFunctionOrGeneratorConcept<decltype(Mutate9)>);
 }
 
 BOOST_AUTO_TEST_CASE(quadratic_equation) {
@@ -253,14 +240,14 @@ BOOST_AUTO_TEST_CASE(quadratic_equation) {
   auto Crossover = [](double x, double y) { return (x + y) / 2; };
   auto maxRand = 1000000;
   auto Generator = [&]() -> double { return maxRand; };
-  auto opts = Evolution::EnvironmentOptions{};
+  auto opts = EnvironmentOptions{};
 
   auto N = 100;
 
-  auto sf = Evolution::GenerateStateFlow(N);
+  auto sf = GenerateStateFlow(N);
   using EnvironmentT =
-      typename Evolution::Environment<decltype(Evaluate), decltype(MutateGen),
-                                      decltype(Crossover)>;
+      typename Environment<decltype(Evaluate), decltype(MutateGen),
+                           decltype(Crossover)>;
   static_assert(std::copyable<EnvironmentT>);
 
   auto envPtr = std::unique_ptr<EnvironmentT>(nullptr);
@@ -269,8 +256,8 @@ BOOST_AUTO_TEST_CASE(quadratic_equation) {
   auto moveTime = std::chrono::nanoseconds{};
   auto moveCtorTime = std::chrono::nanoseconds{};
   {
-    auto envT = Evolution::Environment(Generator, Evaluate, MutateGen,
-                                       Crossover, sf, opts);
+    auto envT =
+        Environment(Generator, Evaluate, MutateGen, Crossover, sf, opts);
     auto envT2 = envT;
     auto envT3 = envT;
     copyCtorTime = Utility::Benchmark([&]() { auto envT2 = envT; }, 100);
@@ -284,7 +271,7 @@ BOOST_AUTO_TEST_CASE(quadratic_equation) {
   for (auto i = size_t{0}; i != 500; ++i)
     env.Run();
 
-  auto sf2 = Evolution::StateFlow{};
+  auto sf2 = StateFlow{};
   for (auto i = size_t{0}; i != N; ++i)
     sf2.SetEvaluate(sf2.GetOrAddInitialState(i));
   env.SetStateFlow(std::move(sf2));
@@ -300,8 +287,7 @@ BOOST_AUTO_TEST_CASE(quadratic_equation) {
   BOOST_TEST(moveTimeC * 10 < copyTimeC);
   BOOST_TEST(moveCtorTimeC * 10 < copyTimeC);
 
-  auto env2 = Evolution::Environment(Generator, Evaluate, MutateGen, Crossover,
-                                     sf, opts);
+  auto env2 = Environment(Generator, Evaluate, MutateGen, Crossover, sf, opts);
   auto absd = 0.00001;
   auto Optimize = [&]() {
     auto nGens = size_t{0};
@@ -334,7 +320,7 @@ BOOST_AUTO_TEST_CASE(quadratic_equation) {
 }
 
 BOOST_AUTO_TEST_CASE(swap_args_test) {
-  auto sf = Evolution::StateFlow{};
+  auto sf = StateFlow{};
   auto s0 = sf.GetOrAddInitialState(0);
   auto s1 = sf.GetOrAddInitialState(1);
   auto s4 = sf.AddCrossover(s0, s1);
@@ -368,12 +354,11 @@ BOOST_AUTO_TEST_CASE(swap_args_test) {
     return y;
   };
   auto generator = [&]() -> DNA { return {copyCounter}; };
-  auto opts = Evolution::EnvironmentOptions{};
+  auto opts = EnvironmentOptions{};
   opts.isEvaluateLightweight = Utility::AutoOption::True();
   opts.isMutateLightweight = Utility::AutoOption::True();
   opts.isCrossoverLightweight = Utility::AutoOption::True();
-  auto env =
-      Evolution::Environment(generator, Evaluate, Mutate, Crossover, sf, opts);
+  auto env = Environment(generator, Evaluate, Mutate, Crossover, sf, opts);
   BOOST_TEST(copyCounter == 0);
   env.Run();
   auto ctr1 = size_t{copyCounter};
@@ -388,7 +373,7 @@ BOOST_AUTO_TEST_CASE(swap_args_test) {
 
 BOOST_AUTO_TEST_CASE(grades_preserve_test) {
   // This test asserts that initial evaluated are not reevaluated
-  auto sf = Evolution::StateFlow{};
+  auto sf = StateFlow{};
   auto s0 = sf.GetOrAddInitialState(0);
   auto s1 = sf.GetOrAddInitialState(1);
   auto s2 = sf.GetOrAddInitialState(2);
@@ -410,12 +395,11 @@ BOOST_AUTO_TEST_CASE(grades_preserve_test) {
   auto Mutate = [](int x) { return x + 1; };
   auto Crossover = [](int x, int y) { return x + y; };
   auto generator = []() -> int { return 1; };
-  auto opts = Evolution::EnvironmentOptions{};
+  auto opts = EnvironmentOptions{};
   opts.isEvaluateLightweight = Utility::AutoOption::True();
   opts.isMutateLightweight = Utility::AutoOption::True();
   opts.isCrossoverLightweight = Utility::AutoOption::True();
-  auto env =
-      Evolution::Environment(generator, Evaluate, Mutate, Crossover, sf, opts);
+  auto env = Environment(generator, Evaluate, Mutate, Crossover, sf, opts);
   auto grades = env.GetGrades();
   auto g1 = grades.at(1);
   auto g2 = grades.at(2);
@@ -446,30 +430,28 @@ BOOST_AUTO_TEST_CASE(random_flow_test) {
 
   auto rand = std::uniform_int_distribution<>();
   auto nextInd = 0;
-  auto GetRandomState = [&](Evolution::StateFlow &sf) {
+  auto GetRandomState = [&](StateFlow &sf) {
     auto &&[sb, se] = sf.GetStates();
     auto i = rand(gen) % (se - sb);
     return *(sb + i);
   };
-  auto AddInitial = [&](Evolution::StateFlow &sf) {
+  auto AddInitial = [&](StateFlow &sf) {
     if (rand(gen) % 3 == 0)
       ++nextInd;
     sf.GetOrAddInitialState(++nextInd);
   };
-  auto AddMutate = [&](Evolution::StateFlow &sf) {
+  auto AddMutate = [&](StateFlow &sf) {
     return sf.AddMutate(GetRandomState(sf));
   };
-  auto AddCrossover = [&](Evolution::StateFlow &sf) {
+  auto AddCrossover = [&](StateFlow &sf) {
     auto s1 = GetRandomState(sf);
     auto s2 = GetRandomState(sf);
     if (s1 == s2)
       s2 = sf.AddMutate(s2);
     return sf.AddCrossover(s1, s2);
   };
-  auto AddEvaluate = [&](Evolution::StateFlow &sf) {
-    sf.SetEvaluate(GetRandomState(sf));
-  };
-  auto AddEvaluateOnLeaves = [&](Evolution::StateFlow &sf) {
+  auto AddEvaluate = [&](StateFlow &sf) { sf.SetEvaluate(GetRandomState(sf)); };
+  auto AddEvaluateOnLeaves = [&](StateFlow &sf) {
     auto &&[sb, se] = sf.GetStates();
     for (auto si = sb; si != se; ++si)
       if (sf.IsLeaf(*si))
@@ -478,7 +460,7 @@ BOOST_AUTO_TEST_CASE(random_flow_test) {
   auto SFGen = [&]() {
     nextInd = 0;
     auto rand = std::uniform_int_distribution<>();
-    auto sf = Evolution::StateFlow{};
+    auto sf = StateFlow{};
     sf.GetOrAddInitialState(++nextInd);
     sf.GetOrAddInitialState(++nextInd);
     for (auto i = 0; i != 1000; ++i) {
@@ -506,13 +488,12 @@ BOOST_AUTO_TEST_CASE(random_flow_test) {
 
     return sf;
   };
-  auto opts = Evolution::EnvironmentOptions{};
+  auto opts = EnvironmentOptions{};
 
-  auto env = Evolution::Environment(Generator, Evaluate, Mutate, Crossover,
-                                    SFGen(), opts);
+  auto env = Environment(Generator, Evaluate, Mutate, Crossover, SFGen(), opts);
   for (auto i = 0; i != 10; ++i) {
     env.RegeneratePopulation();
-    env.SetStateFlow(Evolution::StateFlow(SFGen()));
+    env.SetStateFlow(StateFlow(SFGen()));
     env.Run(size_t{5});
   }
 }
@@ -535,16 +516,16 @@ BOOST_AUTO_TEST_CASE(ctor_test) {
   auto Mutate = [](DNA x) { return DNA{x}; };
   auto Crossover = [](DNA x, DNA y) { return DNA{x}; };
   auto generator = []() -> DNA { return DNA{1, 2}; };
-  auto opts = Evolution::EnvironmentOptions{};
+  auto opts = EnvironmentOptions{};
   opts.isEvaluateLightweight = Utility::AutoOption::True();
   opts.isMutateLightweight = Utility::AutoOption::True();
   opts.isCrossoverLightweight = Utility::AutoOption::True();
 
-  auto env = Evolution::Environment(generator, Evaluate, Mutate, Crossover,
-                                    Evolution::GenerateStateFlow(10), opts,
-                                    [](auto const &x, auto const &y) {
-                                      return Utility::GetIndices(x.size());
-                                    });
+  auto env =
+      Environment(generator, Evaluate, Mutate, Crossover, GenerateStateFlow(10),
+                  opts, [](auto const &x, auto const &y) {
+                    return Utility::GetIndices(x.size());
+                  });
   env.Run();
 }
 
@@ -564,7 +545,7 @@ BOOST_AUTO_TEST_CASE(copy_test) {
     DNA &operator=(DNA &&) noexcept { return *this; }
   };
 
-  auto sf = Evolution::StateFlow{};
+  auto sf = StateFlow{};
   auto s0 = sf.GetOrAddInitialState(0);
   auto s1 = sf.GetOrAddInitialState(1);
   auto s2 = sf.AddMutate(s0);
@@ -577,20 +558,19 @@ BOOST_AUTO_TEST_CASE(copy_test) {
   auto Evaluate = [](DNA const &x) { return 0; };
   auto Mutate1 = [](DNA const &x) { return DNA{x}; };
   auto Crossover1 = [](DNA const &x, DNA const &y) { return DNA{x}; };
-  auto opts = Evolution::EnvironmentOptions{};
+  auto opts = EnvironmentOptions{};
   opts.allowMoveFromPopulation = true;
   opts.isEvaluateLightweight = Utility::AutoOption::Auto();
   opts.isMutateLightweight = Utility::AutoOption::Auto();
   opts.isCrossoverLightweight = Utility::AutoOption::Auto();
 
-  auto opts2 = Evolution::EnvironmentOptions{};
+  auto opts2 = EnvironmentOptions{};
   opts2.allowMoveFromPopulation = false;
   opts2.isEvaluateLightweight = Utility::AutoOption::Auto();
   opts2.isMutateLightweight = Utility::AutoOption::Auto();
   opts2.isCrossoverLightweight = Utility::AutoOption::Auto();
 
-  auto env1 = Evolution::Environment(generator, Evaluate, Mutate1, Crossover1,
-                                     sf, opts);
+  auto env1 = Environment(generator, Evaluate, Mutate1, Crossover1, sf, opts);
   BOOST_TEST(copyCounter <= 7);
   copyCounter = 0;
 
@@ -598,8 +578,7 @@ BOOST_AUTO_TEST_CASE(copy_test) {
   BOOST_TEST(copyCounter <= 4);
   copyCounter = 0;
 
-  auto env5 = Evolution::Environment(generator, Evaluate, Mutate1, Crossover1,
-                                     sf, opts2);
+  auto env5 = Environment(generator, Evaluate, Mutate1, Crossover1, sf, opts2);
   BOOST_TEST(copyCounter <= 7);
   copyCounter = 0;
 
@@ -610,8 +589,7 @@ BOOST_AUTO_TEST_CASE(copy_test) {
   auto Mutate2 = [](DNA &&x) -> DNA & { return x; };
   auto Crossover2 = [](DNA &&x, DNA &&y) -> DNA & { return x; };
 
-  auto env2 = Evolution::Environment(generator, Evaluate, Mutate2, Crossover2,
-                                     sf, opts);
+  auto env2 = Environment(generator, Evaluate, Mutate2, Crossover2, sf, opts);
   BOOST_TEST(copyCounter <= 5);
   copyCounter = 0;
 
@@ -619,8 +597,7 @@ BOOST_AUTO_TEST_CASE(copy_test) {
   BOOST_TEST(copyCounter <= 3);
   copyCounter = 0;
 
-  auto env6 = Evolution::Environment(generator, Evaluate, Mutate2, Crossover2,
-                                     sf, opts2);
+  auto env6 = Environment(generator, Evaluate, Mutate2, Crossover2, sf, opts2);
   BOOST_TEST(copyCounter <= 5);
   copyCounter = 0;
 
@@ -631,8 +608,7 @@ BOOST_AUTO_TEST_CASE(copy_test) {
   auto Mutate3 = [](DNA x) -> DNA { return x; };
   auto Crossover3 = [](DNA x, DNA y) -> DNA { return x; };
 
-  auto env3 = Evolution::Environment(generator, Evaluate, Mutate3, Crossover3,
-                                     sf, opts);
+  auto env3 = Environment(generator, Evaluate, Mutate3, Crossover3, sf, opts);
   BOOST_TEST(copyCounter <= 5);
   copyCounter = 0;
 
@@ -640,8 +616,7 @@ BOOST_AUTO_TEST_CASE(copy_test) {
   BOOST_TEST(copyCounter <= 3);
   copyCounter = 0;
 
-  auto env7 = Evolution::Environment(generator, Evaluate, Mutate3, Crossover3,
-                                     sf, opts2);
+  auto env7 = Environment(generator, Evaluate, Mutate3, Crossover3, sf, opts2);
   BOOST_TEST(copyCounter <= 5);
   copyCounter = 0;
 
@@ -652,16 +627,14 @@ BOOST_AUTO_TEST_CASE(copy_test) {
   auto Mutate4 = [&](DNA const &x) -> DNA & { return orig; };
   auto Crossover4 = [&](DNA const &x, DNA const &y) -> DNA & { return orig; };
 
-  auto env4 = Evolution::Environment(generator, Evaluate, Mutate4, Crossover4,
-                                     sf, opts);
+  auto env4 = Environment(generator, Evaluate, Mutate4, Crossover4, sf, opts);
   BOOST_TEST(copyCounter <= 5);
   copyCounter = 0;
 
   env4.Run(size_t{100});
   BOOST_TEST(copyCounter == 0);
 
-  auto env8 = Evolution::Environment(generator, Evaluate, Mutate4, Crossover4,
-                                     sf, opts2);
+  auto env8 = Environment(generator, Evaluate, Mutate4, Crossover4, sf, opts2);
   BOOST_TEST(copyCounter <= 5);
   copyCounter = 0;
 
@@ -736,14 +709,14 @@ BOOST_AUTO_TEST_CASE(exception_test) {
   for (auto i = size_t{0}; i != N; ++i) {
     population.push_back(std::string(1, static_cast<char>(i)));
   }
-  auto sf = Evolution::GenerateStateFlow(N);
-  auto opts1 = Evolution::EnvironmentOptions{};
+  auto sf = GenerateStateFlow(N);
+  auto opts1 = EnvironmentOptions{};
   opts1.isEvaluateLightweight = Utility::AutoOption::Auto();
   opts1.isMutateLightweight = Utility::AutoOption::Auto();
   opts1.isCrossoverLightweight = Utility::AutoOption::Auto();
   opts1.allowMoveFromPopulation = false;
 
-  auto opts2 = Evolution::EnvironmentOptions{};
+  auto opts2 = EnvironmentOptions{};
   opts2.isEvaluateLightweight = Utility::AutoOption::Auto();
   opts2.isMutateLightweight = Utility::AutoOption::Auto();
   opts2.isCrossoverLightweight = Utility::AutoOption::Auto();
@@ -812,21 +785,19 @@ BOOST_AUTO_TEST_CASE(exception_test) {
 
   Cycle(
       [&]() {
-        Evolution::Environment(generator, Evaluate, Mutate, Crossover, sf,
-                               opts1, Sort);
+        Environment(generator, Evaluate, Mutate, Crossover, sf, opts1, Sort);
       },
       {true, true, true, true, true});
   Cycle(
       [&]() {
-        Evolution::Environment(generator, Evaluate, Mutate, Crossover, sf,
-                               opts2, Sort);
+        Environment(generator, Evaluate, Mutate, Crossover, sf, opts2, Sort);
       },
       {true, true, true, true, true});
 
-  auto env1 = Evolution::Environment(generator, Evaluate, Mutate, Crossover, sf,
-                                     opts1, Sort);
-  auto env2 = Evolution::Environment(generator, Evaluate, Mutate, Crossover, sf,
-                                     opts2, Sort);
+  auto env1 =
+      Environment(generator, Evaluate, Mutate, Crossover, sf, opts1, Sort);
+  auto env2 =
+      Environment(generator, Evaluate, Mutate, Crossover, sf, opts2, Sort);
 
   Cycle([&]() { env1.SetPopulation(Population(population)); },
         {false, true, false, false, true});
@@ -909,13 +880,13 @@ BOOST_AUTO_TEST_CASE(perf_test) {
   };
 
   auto nGens = 30;
-  auto opts = Evolution::EnvironmentOptions{};
+  auto opts = EnvironmentOptions{};
   opts.isEvaluateLightweight = Utility::AutoOption::True();
   opts.isMutateLightweight = Utility::AutoOption::True();
   opts.isCrossoverLightweight = Utility::AutoOption::True();
 
-  auto env = Evolution::Environment(Generator, Evaluate, Mutate, Crossover,
-                                    Evolution::GenerateStateFlow(20), opts);
+  auto env = Environment(Generator, Evaluate, Mutate, Crossover,
+                         GenerateStateFlow(20), opts);
 
   auto tot = Utility::Benchmark([&]() {
     for (auto i = 0; i != nGens; ++i) {
