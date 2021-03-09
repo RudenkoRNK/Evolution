@@ -11,7 +11,7 @@
 #include <tbb/enumerable_thread_specific.h>
 #include <tbb/flow_graph.h>
 
-auto static constexpr verbose = true;
+auto static constexpr verbose = false;
 using namespace Evolution;
 
 BOOST_AUTO_TEST_CASE(first_test) {
