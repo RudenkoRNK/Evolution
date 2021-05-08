@@ -52,7 +52,7 @@ public:
     return *taskFlowPtr;
   }
 
-  ~TaskFlowContainer() noexcept = default;
+  ~TaskFlowContainer() = default;
 
 private:
   static TaskFlowPtr Copy(TaskFlowContainer const &other) {
